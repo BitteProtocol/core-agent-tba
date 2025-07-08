@@ -3,7 +3,7 @@ import { BitteAPIClient } from "../../helpers/bitte-client.js";
 import { createSigner } from "../../helpers/client.js";
 
 export const runtime = "nodejs";
-export const maxDuration = 60;
+export const maxDuration = 600;
 
 const { CRON_SECRET, WALLET_KEY, ENCRYPTION_KEY } = process.env;
 
