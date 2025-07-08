@@ -73,16 +73,6 @@ async function handler(_req: Request) {
 		}
 	} catch (error) {
 		console.error("❌ Cron job failed:", error);
-
-		return new Response(
-			JSON.stringify({
-				success: false,
-				timestamp: new Date().toISOString(),
-				error: error instanceof Error ? error.message : "Unknown error",
-				message: "Cron job failed",
-			}),
-			{ status: 500 },
-		);
 	}
 }
 
