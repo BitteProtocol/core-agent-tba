@@ -5,18 +5,25 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "build": "node scripts/build.cjs"
+    "build": "echo 'build'",
+    "gen-keys": "tsx scripts/gen-keys.ts",
+    "test-cron": "tsx scripts/test-cron.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.11.4",
     "@vercel/ai-sdk-gateway": "^0.1.3",
     "@vercel/mcp-adapter": "0.6.2",
+    "@xmtp/node-sdk": "^3.1.0",
     "ai": "5.0.0-alpha.3",
+    "dotenv": "^17.1.0",
     "hono": "^4.7.10",
+    "uint8arrays": "^5.1.0",
+    "viem": "^2.31.7",
     "zod": "^3.24.3"
   },
   "devDependencies": {
     "@types/node": "^22.13.10",
+    "tsx": "^4.20.3",
     "typescript": "^5.3.3"
   },
   "engines": {
