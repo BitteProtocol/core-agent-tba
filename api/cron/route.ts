@@ -10,7 +10,8 @@ const { CRON_SECRET, WALLET_KEY, ENCRYPTION_KEY } = process.env;
 async function handler(_req: Request) {
 	try {
 		const authHeader = _req.headers.get("Authorization");
-		if (authHeader !== CRON_SECRET) {
+		const authToken = authHeader?.split(" ")[1];
+		if (authToken !== CRON_SECRET) {
 			return new Response("Unauthorized", { status: 401 });
 		}
 
