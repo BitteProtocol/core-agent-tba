@@ -5,6 +5,7 @@
       "name": "bitte-agents-proxy-backend",
       "dependencies": {
         "@xmtp/node-sdk": "^3.1.0",
+        "dotenv": "^17.1.0",
         "uint8arrays": "^5.1.0",
         "viem": "^2.31.7",
       },
@@ -66,6 +67,8 @@
     "@xmtp/proto": ["@xmtp/proto@3.84.0", "", { "dependencies": { "long": "^5.2.0", "protobufjs": "^7.0.0", "rxjs": "^7.8.0", "undici": "^5.8.1" } }, "sha512-yg0SKhF5pfWkcsKmlbkZtAxxYW9R6spFPGotr/Gs/TBvC/ArccBjn9E+CsGUTuWq02O1apRS53yXSNsHMsYp0w=="],
 
     "abitype": ["abitype@1.0.8", "", { "peerDependencies": { "typescript": ">=5.0.4", "zod": "^3 >=3.22.0" }, "optionalPeers": ["typescript", "zod"] }, "sha512-ZeiI6h3GnW06uYDLx0etQtX/p8E24UaHHBj57RSjK7YBFe7iuVn07EDpOeP451D06sF27VOz9JJPlIKJmXgkEg=="],
+
+    "dotenv": ["dotenv@17.1.0", "", {}, "sha512-tG9VUTJTuju6GcXgbdsOuRhupE8cb4mRgY5JLRCh4MtGoVo3/gfGUtOMwmProM6d0ba2mCFvv+WrpYJV6qgJXQ=="],
 
     "eventemitter3": ["eventemitter3@5.0.1", "", {}, "sha512-GWkBvjiSZK87ELrYOSESUYeVIc9mvLLf/nXalMOS5dYrgZq9o5OVkbZAVM06CVxYsCwH9BDZFPlQTlPA1j4ahA=="],
 

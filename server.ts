@@ -1,6 +1,9 @@
 import { Client, type XmtpEnv } from "@xmtp/node-sdk";
 import { BitteAPIClient } from "./helpers/bitte-client.js";
 import { createSigner, getEncryptionKeyFromHex, logAgentDetails } from "./helpers/client.js";
+import dotenv from "dotenv";
+
+dotenv.config();
 
 //update global env types
 declare global {
@@ -15,9 +18,9 @@ declare global {
   }
 }
 
-const { WALLET_KEY, ENCRYPTION_KEY, XMTP_ENV, BITTE_AGENT_ID } = process.env;
+const { WALLET_KEY, ENCRYPTION_KEY, XMTP_ENV, BITTE_AGENT_ID, BITTE_API_KEY } = process.env;
 
-if (!WALLET_KEY || !ENCRYPTION_KEY || !XMTP_ENV || !BITTE_AGENT_ID) {
+if (!WALLET_KEY || !ENCRYPTION_KEY || !XMTP_ENV || !BITTE_AGENT_ID || !BITTE_API_KEY) {
   throw new Error("ENV variables not configured");
 }
 
