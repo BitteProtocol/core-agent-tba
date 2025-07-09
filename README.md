@@ -1,58 +1,65 @@
-# XMTP Bitte Agent Proxy
+# XMTP Bitte Agent Message Listener
 
-This is a Vercel-deployed XMTP agent proxy that processes messages through the Bitte AI API using cron jobs.
+A Node.js service that continuously listens for XMTP messages and processes them through the Bitte AI API.
 
 ## Features
 
-- **XMTP Integration**: Connects to XMTP network to receive and send messages
+- **Real-time XMTP Integration**: Continuously listens for new XMTP messages
 - **Bitte AI Processing**: Routes messages through Bitte AI agents for intelligent responses
-- **Cron Job Architecture**: Processes messages in batches every 5 minutes
-- **Health Monitoring**: Includes health check endpoint for monitoring
+- **Automatic Retry**: Handles errors gracefully with automatic retry logic
+- **Graceful Shutdown**: Properly handles shutdown signals
 
 ## Use Cases
 
-1. **XMTP Message Processing**: Automated response to XMTP messages
+1. **XMTP Message Processing**: Real-time automated response to XMTP messages
 2. **AI Agent Proxy**: Bridge between XMTP and Bitte AI agents
-3. **Batch Processing**: Efficient message handling in serverless environment
+3. **Continuous Service**: Long-running service for persistent message handling
 
 ## Setup
 
-1. **Environment Variables**: Create a `.env` file with:
+1. **Install Dependencies**:
+   ```bash
+   pnpm install
+   ```
+
+2. **Environment Variables**: Create a `.env` file with:
    ```
    WALLET_KEY=your_wallet_private_key
    ENCRYPTION_KEY=your_encryption_key
    BITTE_API_KEY=your_bitte_api_key
    ```
 
-2. **Deploy to Vercel**: 
+3. **Run the Service**:
    ```bash
-   vercel deploy
+   pnpm start
    ```
-
-3. **Cron Job**: The cron job runs every 5 minutes (`*/5 * * * *`) and processes new messages
 
 ## Scripts
 
+- `pnpm start`: Start the XMTP message listener
+- `pnpm dev`: Start the service in development mode
 - `pnpm run gen-keys`: Generate wallet and encryption keys
-- `pnpm run test-cron`: Test the cron job functionality locally
-
-## Endpoints
-
-- `GET /api` - Cron job endpoint (processes messages)
-- `GET /api/health` - Health check endpoint
+- `pnpm run test-cron`: Test the message processing functionality
 
 ## How It Works
 
-1. **Cron Trigger**: Vercel cron job triggers every 5 minutes
-2. **XMTP Sync**: Syncs with XMTP network to get latest conversations
-3. **Message Processing**: Processes recent messages (last 5 minutes)
+1. **XMTP Setup**: Creates XMTP client and syncs conversations
+2. **Message Streaming**: Continuously listens for new messages via streaming
+3. **Message Processing**: Processes each incoming message immediately
 4. **AI Response**: Sends messages to Bitte AI agent for processing
 5. **Reply**: Sends AI response back to XMTP conversation
-6. **Status Return**: Returns processing status and metrics
+6. **Error Handling**: Handles errors gracefully and retries on failures
+
+## Deployment
+
+This service is designed to run as a long-running process. You can deploy it to:
+- VPS or dedicated server
+- Docker container
+- Cloud services like Railway, Fly.io, or DigitalOcean App Platform
 
 ## Troubleshooting
 
 - **Check Environment Variables**: Ensure all required env vars are set
 - **Test Locally**: Use `pnpm run test-cron` to test functionality
-- **Monitor Logs**: Check Vercel function logs for detailed execution info
-- **Health Check**: Use `/api/health` to verify service status
+- **Monitor Logs**: Check console output for detailed execution info
+- **Restart on Errors**: The service automatically retries on failures
