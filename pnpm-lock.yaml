@@ -14,6 +14,9 @@ importers:
       ai:
         specifier: 5.0.0-alpha.3
         version: 5.0.0-alpha.3(zod@3.25.76)
+      dotenv:
+        specifier: ^17.1.0
+        version: 17.1.0
       uint8arrays:
         specifier: ^5.1.0
         version: 5.1.0
@@ -304,6 +307,10 @@ packages:
     peerDependencies:
       zod: ^3.23.8
 
+  dotenv@17.1.0:
+    resolution: {integrity: sha512-tG9VUTJTuju6GcXgbdsOuRhupE8cb4mRgY5JLRCh4MtGoVo3/gfGUtOMwmProM6d0ba2mCFvv+WrpYJV6qgJXQ==}
+    engines: {node: '>=12'}
+
   esbuild@0.25.6:
     resolution: {integrity: sha512-GVuzuUwtdsghE3ocJ9Bs8PNoF13HNQ5TXbEi2AhvVb8xU1Iwt9Fos9FEamfoee+u/TOsn7GUWc04lz46n2bbTg==}
     engines: {node: '>=18'}
@@ -590,6 +597,8 @@ snapshots:
       '@ai-sdk/provider-utils': 3.0.0-alpha.3(zod@3.25.76)
       '@opentelemetry/api': 1.9.0
       zod: 3.25.76
+
+  dotenv@17.1.0: {}
 
   esbuild@0.25.6:
     optionalDependencies:
