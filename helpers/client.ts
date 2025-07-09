@@ -2,7 +2,7 @@ import { getRandomValues } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { type Client, IdentifierKind, type Signer } from "@xmtp/node-sdk";
-import { fromString, toString } from "uint8arrays";
+import { fromString, toString as uint8ArrayToString } from "uint8arrays";
 import { createWalletClient, http, toBytes } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { sepolia } from "viem/chains";
@@ -53,7 +53,7 @@ export const generateEncryptionKeyHex = () => {
 	/* Generate a random encryption key */
 	const uint8Array = getRandomValues(new Uint8Array(32));
 	/* Convert the encryption key to a hex string */
-	return toString(uint8Array, "hex");
+	return uint8ArrayToString(uint8Array, "hex");
 };
 
 /**

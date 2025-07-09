@@ -11,12 +11,15 @@
       },
       "devDependencies": {
         "@types/node": "^22.16.2",
+        "@biomejs/monorepo": "biomejs/biome",
         "typescript": "^5.8.3",
       },
     },
   },
   "packages": {
     "@adraffy/ens-normalize": ["@adraffy/ens-normalize@1.11.0", "", {}, "sha512-/3DDPKHqqIqxUULp8yP4zODUY1i+2xvVWsv8A79xGWdCAG+8sb0hRh0Rk2QyOJUnnbyPUAZYcpBuRe3nS2OIUg=="],
+
+    "@biomejs/monorepo": ["@biomejs/monorepo@github:biomejs/biome#5f3f5a6", {}, "biomejs-biome-5f3f5a6"],
 
     "@fastify/busboy": ["@fastify/busboy@2.1.1", "", {}, "sha512-vBZP4NlzfOlerQTnba4aqZoMhE/a9HY7HRqoOPaETQcSQuWEIyZMHGfVu6w9wGtGK5fED5qRs2DteVCjOH60sA=="],
 
