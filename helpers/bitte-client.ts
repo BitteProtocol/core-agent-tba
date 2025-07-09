@@ -78,10 +78,6 @@ export class BitteAPIClient {
 		};
 
 		try {
-			console.log("🔗 Sending request to Bitte API...");
-			console.log("URL:", url);
-			console.log("Agent ID:", agentId);
-			console.log("Message:", message);
 
 			const response = await fetch(url, {
 				method: "POST",
@@ -107,8 +103,6 @@ export class BitteAPIClient {
 			// Parse the streaming response
 			const responseText = await response.text();
 			const parsedResponse = this.parseStreamingResponse(responseText);
-
-			console.log("✅ Received response from Bitte API");
 
 			return parsedResponse;
 		} catch (error) {
@@ -188,8 +182,6 @@ export class BitteAPIClient {
 		const metadataUrl = `https://${agentId}/.well-known/ai-plugin.json`;
 
 		try {
-			console.log(`📋 Fetching agent metadata from: ${metadataUrl}`);
-
 			const response = await fetch(metadataUrl, {
 				method: "GET",
 				headers: {
@@ -206,7 +198,6 @@ export class BitteAPIClient {
 			}
 
 			const metadata = (await response.json()) as any;
-			console.log("✅ Successfully fetched agent metadata");
 
 			return {
 				info: metadata.info,
@@ -225,7 +216,6 @@ export class BitteAPIClient {
 	 */
 	newConversation(): void {
 		this.chatId = this.generateChatId();
-		console.log(`🆕 Started new conversation: ${this.chatId}`);
 	}
 
 	/**
@@ -277,9 +267,6 @@ export class BitteAPIClient {
 		};
 
 		try {
-			console.log("🔗 Sending streaming request to Bitte API...");
-			console.log("Message:", message);
-			console.log(`\nAgent (${agentId}): `);
 
 			const response = await fetch(url, {
 				method: "POST",
@@ -306,8 +293,6 @@ export class BitteAPIClient {
 			const responseText = await response.text();
 			const parsedResponse =
 				this.parseStreamingResponseWithDisplay(responseText);
-
-			console.log("\n✅ Streaming response completed");
 
 			return parsedResponse;
 		} catch (error) {
@@ -361,7 +346,6 @@ export class BitteAPIClient {
 					try {
 						const toolCall = JSON.parse(line.substring(2));
 						toolCalls.push(toolCall);
-						console.log(`\n🔧 Tool call: ${toolCall.toolName || "unknown"}`);
 					} catch (_e) {
 						// Ignore invalid tool call data
 					}
@@ -386,7 +370,6 @@ export class BitteAPIClient {
 	 */
 	async testConnection(agentId: string): Promise<boolean> {
 		try {
-			console.log("🔍 Testing connection to Bitte API...");
 
 			const walletInfo = {
 				evmAddress: "0x0000000000000000000000000000000000000000",
@@ -399,8 +382,6 @@ export class BitteAPIClient {
 			);
 
 			if (response?.content) {
-				console.log("✅ Connection test successful!");
-				console.log("Response:", response.content);
 				return true;
 			}
 

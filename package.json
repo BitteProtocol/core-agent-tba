@@ -5,23 +5,19 @@
 	"type": "module",
 	"private": true,
 	"scripts": {
-		"start": "tsx server.ts",
-		"dev": "tsx server.ts",
-		"gen-keys": "tsx scripts/gen-keys.ts",
-		"test-cron": "tsx scripts/test-cron.ts"
+		"dev": "bun server.ts",
+		"start": "bun server.ts",
+		"gen-keys": "bun scripts/gen-keys.ts"
 	},
 	"dependencies": {
 		"@xmtp/node-sdk": "^3.1.0",
-		"ai": "5.0.0-alpha.3",
-		"dotenv": "^17.1.0",
 		"uint8arrays": "^5.1.0",
 		"viem": "^2.31.7"
 	},
 	"devDependencies": {
-		"@types/node": "^22.13.10",
-		"tsx": "^4.20.3",
-		"typescript": "^5.3.3"
+		"@types/node": "^22.16.2",
+		"typescript": "^5.8.3"
 	},
-	"author": "",
+	"author": "Bitte",
 	"license": "ISC"
 }
