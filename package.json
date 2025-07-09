@@ -1,11 +1,12 @@
 {
 	"name": "bitte-agents-proxy-backend",
 	"version": "0.1.0",
-	"description": "Bitte Agents Proxy Backend on Vercel",
+	"description": "XMTP Message Listener for Bitte Agent",
 	"type": "module",
 	"private": true,
 	"scripts": {
-		"build": "echo 'build'",
+		"start": "tsx server.ts",
+		"dev": "tsx server.ts",
 		"gen-keys": "tsx scripts/gen-keys.ts",
 		"test-cron": "tsx scripts/test-cron.ts"
 	},
