@@ -1,8 +1,16 @@
 import { createHash } from "node:crypto";
-import { CONFIG } from "./config.js";
+import {
+	BITTE_API_KEY,
+	CHAT_API_URL,
+	DEFAULT_AGENT_ID,
+	MCP_SERVER_URL,
+} from "./config.js";
 
 type WalletInfo = {
-	evmAddress: string;
+	evm?: {
+		address?: string;
+		chainId?: number;
+	};
 };
 
 /**
@@ -11,12 +19,10 @@ type WalletInfo = {
  */
 export class BitteAPIClient {
 	private apiKey: string;
-	private baseUrl: string;
 	private chatId: string;
 
 	constructor(apiKey?: string) {
-		this.apiKey = apiKey || process.env.BITTE_API_KEY || "";
-		this.baseUrl = "https://bitte.ai";
+		this.apiKey = apiKey || BITTE_API_KEY;
 		this.chatId = this.generateChatId();
 	}
 
@@ -43,13 +49,15 @@ export class BitteAPIClient {
 	/**
 	 * Send message to Bitte agent
 	 */
-	async sendToAgent(
-		agentId: string,
-		message: string,
-		walletInfo: WalletInfo,
-	): Promise<any> {
-		const url = `${this.baseUrl}/api/chat`;
-
+	async sendToAgent({
+		message,
+		walletInfo,
+		agentId = DEFAULT_AGENT_ID,
+	}: {
+		message: string;
+		walletInfo?: WalletInfo;
+		agentId?: string;
+	}) {
 		const messageId = this.generateMessageId();
 		const timestamp = new Date().toISOString();
 
@@ -72,23 +80,18 @@ export class BitteAPIClient {
 			config: {
 				mode: "debug",
 				agentId: agentId,
-				mcpServerUrl: CONFIG.MCP_SERVER_URL,
+				mcpServerUrl: MCP_SERVER_URL,
 			},
-			evmAddress: walletInfo.evmAddress || null,
+			evmAddress: walletInfo?.evm?.address || null,
+			chainId: walletInfo?.evm?.chainId || null,
 		};
 
 		try {
-
-			const response = await fetch(url, {
+			const response = await fetch(CHAT_API_URL, {
 				method: "POST",
 				headers: {
 					"Content-Type": "application/json",
 					Authorization: `Bearer ${this.apiKey}`,
-					Accept: "*/*",
-					Origin: "https://bitte.ai",
-					Referer: `https://bitte.ai/chat?agentid=${agentId}&chatId=${this.chatId}`,
-					"User-Agent":
-						"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",
 				},
 				body: JSON.stringify(payload),
 			});
@@ -115,7 +118,7 @@ export class BitteAPIClient {
 	 * Parse the streaming response from Bitte API
 	 * Format: f:{metadata}\n0:"text"\n0:"chunk"\ne:{endData}\nd:{doneData}\n8:[metadata]
 	 */
-	private parseStreamingResponse(responseText: string): any {
+	private parseStreamingResponse(responseText: string) {
 		const lines = responseText.split("\n").filter((line) => line.trim());
 
 		let messageId = "";
@@ -123,7 +126,7 @@ export class BitteAPIClient {
 		let finishReason = "";
 		let usage = null;
 		let agentId = "";
-		const toolCalls: any[] = [];
+		const toolCalls: Record<string, unknown>[] = [];
 
 		for (const line of lines) {
 			try {
@@ -178,17 +181,12 @@ export class BitteAPIClient {
 	/**
 	 * Get agent metadata from .well-known/ai-plugin.json
 	 */
-	async getAgentMetadata(agentId: string): Promise<any> {
+	async getAgentMetadata(agentId: string) {
 		const metadataUrl = `https://${agentId}/.well-known/ai-plugin.json`;
 
 		try {
 			const response = await fetch(metadataUrl, {
 				method: "GET",
-				headers: {
-					Accept: "application/json",
-					"User-Agent":
-						"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",
-				},
 			});
 
 			if (!response.ok) {
@@ -197,7 +195,7 @@ export class BitteAPIClient {
 				);
 			}
 
-			const metadata = (await response.json()) as any;
+			const metadata = await response.json();
 
 			return {
 				info: metadata.info,
@@ -231,10 +229,8 @@ export class BitteAPIClient {
 	async sendToAgentStreaming(
 		agentId: string,
 		message: string,
-		walletInfo: any,
-	): Promise<any> {
-		const url = `${this.baseUrl}/api/chat`;
-
+		walletInfo: WalletInfo,
+	) {
 		const messageId = this.generateMessageId();
 		const timestamp = new Date().toISOString();
 
@@ -257,27 +253,17 @@ export class BitteAPIClient {
 			config: {
 				mode: "debug",
 				agentId: agentId,
-				mcpServerUrl: CONFIG.MCP_SERVER_URL,
+				mcpServerUrl: MCP_SERVER_URL,
 			},
-			evmAddress: walletInfo.evm?.address || null,
-			chainId: walletInfo.evm?.chainId || null,
-			accountId: walletInfo.near?.address || null,
-			nearWalletId: "meteor-wallet",
-			suiAddress: walletInfo.sui?.address || null,
+			evmAddress: walletInfo?.evm?.address || null,
 		};
 
 		try {
-
-			const response = await fetch(url, {
+			const response = await fetch(CHAT_API_URL, {
 				method: "POST",
 				headers: {
 					"Content-Type": "application/json",
 					Authorization: `Bearer ${this.apiKey}`,
-					Accept: "*/*",
-					Origin: "https://bitte.ai",
-					Referer: `https://bitte.ai/chat?agentid=${agentId}&chatId=${this.chatId}`,
-					"User-Agent":
-						"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",
 				},
 				body: JSON.stringify(payload),
 			});
@@ -304,7 +290,7 @@ export class BitteAPIClient {
 	/**
 	 * Parse streaming response with real-time display
 	 */
-	private parseStreamingResponseWithDisplay(responseText: string): any {
+	private parseStreamingResponseWithDisplay(responseText: string) {
 		const lines = responseText.split("\n").filter((line) => line.trim());
 
 		let messageId = "";
@@ -312,7 +298,7 @@ export class BitteAPIClient {
 		let finishReason = "";
 		let usage = null;
 		let agentId = "";
-		const toolCalls: any[] = [];
+		const toolCalls: Record<string, unknown>[] = [];
 
 		for (const line of lines) {
 			try {
@@ -368,18 +354,16 @@ export class BitteAPIClient {
 	/**
 	 * Test API connection with a simple message
 	 */
-	async testConnection(agentId: string): Promise<boolean> {
+	async testConnection(
+		agentId?: string,
+		walletInfo?: WalletInfo,
+	): Promise<boolean> {
 		try {
-
-			const walletInfo = {
-				evmAddress: "0x0000000000000000000000000000000000000000",
-			};
-
-			const response = await this.sendToAgent(
+			const response = await this.sendToAgent({
+				message: "Hello, are you available?",
 				agentId,
-				"Hello, are you available?",
 				walletInfo,
-			);
+			});
 
 			if (response?.content) {
 				return true;
