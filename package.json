@@ -18,7 +18,7 @@
 		"viem": "^2.31.7"
 	},
 	"devDependencies": {
-		"@biomejs/monorepo": "biomejs/biome",
+		"@biomejs/biome": "2.1.1",
 		"@types/node": "^22.16.2",
 		"typescript": "^5.8.3"
 	},
