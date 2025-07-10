@@ -4,7 +4,7 @@ import {
 	CHAT_API_URL,
 	DEFAULT_AGENT_ID,
 	MCP_SERVER_URL,
-} from "./config.js";
+} from "@/helpers/config";
 
 type WalletInfo = {
 	evm?: {

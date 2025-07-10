@@ -1,5 +1,7 @@
 import dotenv from "dotenv";
 
+dotenv.config();
+
 // Configuration
 export const {
 	WALLET_KEY,
@@ -13,7 +15,6 @@ export const {
 	DEFAULT_AGENT_ID,
 	NETWORKS,
 } = (() => {
-	dotenv.config();
 	const {
 		WALLET_KEY,
 		ENCRYPTION_KEY,

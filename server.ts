@@ -1,11 +1,11 @@
 import { Client, type XmtpEnv } from "@xmtp/node-sdk";
-import { BitteAPIClient } from "./helpers/bitte-client.js";
+import { BitteAPIClient } from "@/helpers/bitte-client";
 import {
 	createSigner,
 	getEncryptionKeyFromHex,
 	logAgentDetails,
-} from "./helpers/client.js";
-import { ENCRYPTION_KEY, WALLET_KEY, XMTP_ENV } from "./helpers/config.js";
+} from "@/helpers/client";
+import { ENCRYPTION_KEY, WALLET_KEY, XMTP_ENV } from "@/helpers/config";
 
 /**
  * Main function to run the agent
@@ -18,6 +18,8 @@ async function main() {
 	const client = await Client.create(signer, {
 		dbEncryptionKey,
 		env: XMTP_ENV as XmtpEnv,
+		// don't create local db files during development
+		dbPath: process.env.NODE_ENV === "production" ? undefined : null,
 	});
 
 	void logAgentDetails(client);
