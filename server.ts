@@ -27,6 +27,8 @@ async function main() {
 	const signer = createSigner(WALLET_KEY);
 	const dbEncryptionKey = getEncryptionKeyFromHex(ENCRYPTION_KEY);
 
+	console.log("IS_PRODUCTION", IS_PRODUCTION);
+
 	const config: ClientOptions = {
 		dbEncryptionKey,
 		env: XMTP_ENV as XmtpEnv,
@@ -35,12 +37,15 @@ async function main() {
 		codecs: [new ReactionCodec()],
 		disableAutoRegister: true,
 	};
+
 	const client = await getOrCreateClient(signer, config);
 
 	if (client.isRegistered) {
 		await client.revokeAllOtherInstallations();
+		console.log("Revoked all other installations");
 	} else {
 		await client.register();
+		console.log("Registered client");
 	}
 
 	void logAgentDetails(client);
