@@ -20,13 +20,19 @@ async function main() {
 		env: XMTP_ENV as XmtpEnv,
 		// don't create local db files during development
 		dbPath: process.env.NODE_ENV === "production" ? undefined : null,
+		disableAutoRegister: true,
 	});
+
+	if (client.isRegistered) {
+		await client.revokeAllOtherInstallations();
+	} else {
+		await client.register();
+	}
 
 	void logAgentDetails(client);
 
 	/* Sync the conversations from the network to update the local db */
 	await client.conversations.sync();
-	await client.revokeAllOtherInstallations();
 
 	// Stream all messages for GPT responses
 	const messageStream = () => {
