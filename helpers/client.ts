@@ -1,11 +1,19 @@
 import { getRandomValues } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { type Client, IdentifierKind, type Signer } from "@xmtp/node-sdk";
+import type { Reaction, ReactionCodec } from "@xmtp/content-type-reaction";
+import {
+	Client,
+	type ClientOptions,
+	type ExtractCodecContentTypes,
+	IdentifierKind,
+	type Signer,
+} from "@xmtp/node-sdk";
 import { fromString, toString as uint8ArrayToString } from "uint8arrays";
 import { createWalletClient, http, toBytes } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { sepolia } from "viem/chains";
+import { IS_PRODUCTION } from "@/helpers/config";
 
 interface User {
 	key: `0x${string}`;
@@ -77,25 +85,24 @@ export const getDbPath = (description: string = "xmtp") => {
 };
 
 export const logAgentDetails = async (
-	clients: Client | Client[],
+	clients: Client<ExtractCodecContentTypes<[ReactionCodec]>>,
 ): Promise<void> => {
 	const clientArray = Array.isArray(clients) ? clients : [clients];
-	const clientsByAddress = clientArray.reduce<Record<string, Client[]>>(
-		(acc, client) => {
-			const address = client.accountIdentifier?.identifier as string;
-			acc[address] = acc[address] ?? [];
-			acc[address].push(client);
-			return acc;
-		},
-		{},
-	);
+	const clientsByAddress = clientArray.reduce<
+		Record<string, Client<string | Reaction>[]>
+	>((acc, client) => {
+		const address = client.accountIdentifier?.identifier as string;
+		acc[address] = acc[address] ?? [];
+		acc[address].push(client);
+		return acc;
+	}, {});
 
 	for (const [address, clientGroup] of Object.entries(clientsByAddress)) {
 		const firstClient = clientGroup[0];
 		const inboxId = firstClient.inboxId;
 		const installationId = firstClient.installationId;
 		const environments = clientGroup
-			.map((c: Client) => c.options?.env ?? "production")
+			.map((c: Client<string | Reaction>) => c.options?.env ?? "production")
 			.join(", ");
 		console.log(`\x1b[38;2;252;76;52m
         ██╗  ██╗███╗   ███╗████████╗██████╗ 
@@ -160,3 +167,14 @@ export function validateEnvironment(vars: string[]): Record<string, string> {
 		return acc;
 	}, {});
 }
+
+export const getOrCreateClient = async (
+	signer: Signer,
+	config: ClientOptions,
+): Promise<Client<ExtractCodecContentTypes<typeof config.codecs>>> => {
+	const identifier = await signer.getIdentifier();
+	const client = IS_PRODUCTION
+		? await Client.build(identifier, config)
+		: await Client.create(signer, config);
+	return client;
+};

@@ -7,6 +7,7 @@ export const {
 	WALLET_KEY,
 	ENCRYPTION_KEY,
 	XMTP_ENV,
+	OPENAI_API_KEY,
 	BITTE_AGENT_ID,
 	BITTE_API_KEY,
 	BITTE_API_BASE,
@@ -14,6 +15,7 @@ export const {
 	MCP_SERVER_URL,
 	DEFAULT_AGENT_ID,
 	NETWORKS,
+	IS_PRODUCTION,
 } = (() => {
 	const {
 		WALLET_KEY,
@@ -21,6 +23,8 @@ export const {
 		XMTP_ENV,
 		BITTE_AGENT_ID,
 		BITTE_API_KEY,
+		OPENAI_API_KEY,
+		NODE_ENV,
 	} = process.env;
 
 	if (
@@ -28,7 +32,8 @@ export const {
 		!ENCRYPTION_KEY ||
 		!XMTP_ENV ||
 		!BITTE_AGENT_ID ||
-		!BITTE_API_KEY
+		!BITTE_API_KEY ||
+		!OPENAI_API_KEY
 	) {
 		throw new Error("ENV variables not configured");
 	}
@@ -71,5 +76,7 @@ export const {
 		XMTP_ENV,
 		BITTE_API_KEY,
 		BITTE_AGENT_ID,
+		OPENAI_API_KEY,
+		IS_PRODUCTION: NODE_ENV === "production",
 	};
 })();

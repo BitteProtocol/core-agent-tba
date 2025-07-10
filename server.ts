@@ -1,17 +1,23 @@
+import { openai } from "@ai-sdk/openai";
 import {
 	ContentTypeReaction,
 	ReactionCodec,
 } from "@xmtp/content-type-reaction";
-import { Client, type XmtpEnv } from "@xmtp/node-sdk";
+import type { ClientOptions, XmtpEnv } from "@xmtp/node-sdk";
+import { generateText } from "ai";
 import { BitteAPIClient } from "@/helpers/bitte-client";
 import {
 	createSigner,
 	getEncryptionKeyFromHex,
+	getOrCreateClient,
 	logAgentDetails,
 } from "@/helpers/client";
-import { ENCRYPTION_KEY, WALLET_KEY, XMTP_ENV } from "@/helpers/config";
-import { generateText } from "ai";
-import { openai } from "@ai-sdk/openai";
+import {
+	ENCRYPTION_KEY,
+	IS_PRODUCTION,
+	WALLET_KEY,
+	XMTP_ENV,
+} from "@/helpers/config";
 
 /**
  * Main function to run the agent
@@ -21,14 +27,15 @@ async function main() {
 	const signer = createSigner(WALLET_KEY);
 	const dbEncryptionKey = getEncryptionKeyFromHex(ENCRYPTION_KEY);
 
-	const client = await Client.create(signer, {
+	const config: ClientOptions = {
 		dbEncryptionKey,
 		env: XMTP_ENV as XmtpEnv,
 		// don't create local db files during development
-		dbPath: process.env.NODE_ENV === "production" ? undefined : null,
+		dbPath: IS_PRODUCTION ? undefined : null,
 		codecs: [new ReactionCodec()],
 		disableAutoRegister: true,
-	});
+	};
+	const client = await getOrCreateClient(signer, config);
 
 	if (client.isRegistered) {
 		await client.revokeAllOtherInstallations();
@@ -36,8 +43,7 @@ async function main() {
 		await client.register();
 	}
 
-	// biome-ignore lint/suspicious/noExplicitAny: XMTP client type incompatibility
-	void logAgentDetails(client as any);
+	void logAgentDetails(client);
 
 	/* Sync the conversations from the network to update the local db */
 	await client.conversations.sync();
@@ -98,8 +104,7 @@ async function main() {
 						schema: "unicode",
 					};
 
-					// biome-ignore lint/suspicious/noExplicitAny: XMTP reaction type incompatibility
-					await conversation.send(reaction as any, ContentTypeReaction);
+					await conversation.send(reaction, ContentTypeReaction);
 
 					/* Get the AI response */
 					const completion = await bitteClient.sendToAgent({
