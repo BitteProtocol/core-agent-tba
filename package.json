@@ -12,18 +12,19 @@
 		"check:fix": "biome check --write"
 	},
 	"dependencies": {
-		"@ai-sdk/openai": "^2.0.0-beta.6",
+		"@ai-sdk/openai": "^1.2.0",
+		"ai": "=4.3.9",
 		"@xmtp/content-type-reaction": "^2.0.2",
 		"@xmtp/content-type-transaction-reference": "^2.0.2",
 		"@xmtp/content-type-wallet-send-calls": "^2.0.0",
 		"@xmtp/node-sdk": "^3.1.1",
-		"ai": "^5.0.0-beta.13",
 		"dotenv": "^17.2.0",
 		"uint8arrays": "^5.1.0",
 		"viem": "^2.31.7"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "2.1.1",
+		"@bitte-ai/types": "^0.7.0",
 		"@types/node": "^22.16.2",
 		"typescript": "^5.8.3"
 	},

@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import type { ToolInvocation } from "ai";
 import {
 	BITTE_API_KEY,
 	CHAT_API_URL,
@@ -57,7 +58,18 @@ export class BitteAPIClient {
 		message: string;
 		walletInfo?: WalletInfo;
 		agentId?: string;
-	}) {
+	}): Promise<{
+		messageId: string;
+		content: string;
+		finishReason: string;
+		usage: {
+			promptTokens: number;
+			completionTokens: number;
+		};
+		toolCalls: ToolInvocation[];
+		raw: string;
+		timestamp: string;
+	}> {
 		const messageId = this.generateMessageId();
 		const timestamp = new Date().toISOString();
 
@@ -125,8 +137,7 @@ export class BitteAPIClient {
 		let fullText = "";
 		let finishReason = "";
 		let usage = null;
-		let agentId = "";
-		const toolCalls: Record<string, unknown>[] = [];
+		const toolCalls: ToolInvocation[] = [];
 
 		for (const line of lines) {
 			try {
@@ -148,13 +159,23 @@ export class BitteAPIClient {
 					const doneData = JSON.parse(line.substring(2));
 					if (!finishReason) finishReason = doneData.finishReason || "";
 					if (!usage) usage = doneData.usage || null;
-				} else if (line.startsWith("8:")) {
-					// Additional metadata
-					const metadata = JSON.parse(line.substring(2));
-					if (Array.isArray(metadata) && metadata[0]?.agentId) {
-						agentId = metadata[0].agentId;
-					}
 				} else if (line.startsWith("1:")) {
+					// Tool calls (if any)
+					try {
+						const toolCall = JSON.parse(line.substring(2));
+						toolCalls.push(toolCall);
+					} catch (_e) {
+						// Ignore invalid tool call data
+					}
+				} else if (line.startsWith("9:")) {
+					// Tool calls (if any)
+					try {
+						const toolCall = JSON.parse(line.substring(2));
+						toolCalls.push(toolCall);
+					} catch (_e) {
+						// Ignore invalid tool call data
+					}
+				} else if (line.startsWith("a:")) {
 					// Tool calls (if any)
 					try {
 						const toolCall = JSON.parse(line.substring(2));
@@ -171,7 +192,6 @@ export class BitteAPIClient {
 			content: fullText,
 			finishReason,
 			usage,
-			agentId,
 			toolCalls,
 			raw: responseText,
 			timestamp: new Date().toISOString(),
@@ -297,7 +317,6 @@ export class BitteAPIClient {
 		let fullText = "";
 		let finishReason = "";
 		let usage = null;
-		let agentId = "";
 		const toolCalls: Record<string, unknown>[] = [];
 
 		for (const line of lines) {
@@ -321,12 +340,6 @@ export class BitteAPIClient {
 					const doneData = JSON.parse(line.substring(2));
 					if (!finishReason) finishReason = doneData.finishReason || "";
 					if (!usage) usage = doneData.usage || null;
-				} else if (line.startsWith("8:")) {
-					// Additional metadata
-					const metadata = JSON.parse(line.substring(2));
-					if (Array.isArray(metadata) && metadata[0]?.agentId) {
-						agentId = metadata[0].agentId;
-					}
 				} else if (line.startsWith("1:")) {
 					// Tool calls (if any)
 					try {
@@ -344,7 +357,6 @@ export class BitteAPIClient {
 			content: fullText,
 			finishReason,
 			usage,
-			agentId,
 			toolCalls,
 			raw: responseText,
 			timestamp: new Date().toISOString(),
@@ -376,3 +388,4 @@ export class BitteAPIClient {
 		}
 	}
 }
+

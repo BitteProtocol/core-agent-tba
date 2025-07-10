@@ -5,9 +5,14 @@ import {
 	ReactionCodec,
 } from "@xmtp/content-type-reaction";
 import { TransactionReferenceCodec } from "@xmtp/content-type-transaction-reference";
-import { WalletSendCallsCodec } from "@xmtp/content-type-wallet-send-calls";
+import {
+	ContentTypeWalletSendCalls,
+	WalletSendCallsCodec,
+	type WalletSendCallsParams,
+} from "@xmtp/content-type-wallet-send-calls";
+
 import { LogLevel, type XmtpEnv } from "@xmtp/node-sdk";
-import { generateText } from "ai";
+import { generateText, tool, type ToolInvocation } from "ai";
 import { BitteAPIClient } from "@/helpers/bitte-client";
 import {
 	createClientWithRevoke,
@@ -40,7 +45,7 @@ async function main() {
 			new WalletSendCallsCodec(),
 			new TransactionReferenceCodec(),
 		],
-		loggingLevel: IS_PRODUCTION ? LogLevel.error : LogLevel.debug,
+		loggingLevel: IS_PRODUCTION ? LogLevel.error : LogLevel.info,
 	});
 
 	void logAgentDetails(client);
@@ -96,7 +101,7 @@ async function main() {
 
 				const emoji = await generateText({
 					model: openai("gpt-4.1-nano"),
-					prompt: `Return only a single emoji that matches the sentiment of this message: ${messageString.substring(0, 100)}. Do not include any other text or explanation.`,
+					prompt: `Return only a single emoji that matches the sentiment of this message: ${messageString}. Do not include any other text or explanation.`,
 				});
 
 				try {
@@ -120,10 +125,47 @@ async function main() {
 						},
 					});
 
-					const content = completion.content;
+					const handleEvmTx = (
+						toolCall: ToolInvocation,
+					): WalletSendCallsParams => {
+						const params: WalletSendCallsParams = {
+							version: "1.0.0",
+							chainId: toolCall?.args?.chainId || undefined,
+							from: toolCall?.args?.params?.[0]?.from || addressFromInboxId,
+							calls: [
+								{
+									to: toolCall?.args?.params?.[0]?.to || undefined,
+									data: toolCall?.args?.params?.[0]?.data || undefined,
+									value: toolCall?.args?.params?.[0]?.value || undefined,
+									gas: toolCall?.args?.params?.[0]?.gas || undefined,
+									metadata: {
+										description: `bitte agent tx from xmtp`,
+										transactionType:
+											toolCall?.args?.params?.[0]?.method || "transfer",
+									},
+								},
+							],
+						};
+						return params;
+					};
 
-					/* Send the AI response to the conversation */
-					await conversation.send(content);
+					// reverse the tool calls to send them in the correct order
+					if (completion?.toolCalls) {
+						for (const toolCall of completion.toolCalls) {
+							// WalletSendCallsParams
+							if (toolCall?.toolName === "generate-evm-tx") {
+								const walletParams = handleEvmTx(toolCall);
+								console.log("sending tx params", walletParams);
+								await conversation.send(
+									walletParams,
+									ContentTypeWalletSendCalls,
+								);
+							}
+						}
+					}
+
+					// send the final response
+					await conversation.send(completion.content);
 				} catch (error) {
 					console.error("Error getting AI response:", error);
 					await conversation.send(
