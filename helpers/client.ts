@@ -173,8 +173,10 @@ export const getOrCreateClient = async (
 	config: ClientOptions,
 ): Promise<Client<ExtractCodecContentTypes<typeof config.codecs>>> => {
 	const identifier = await signer.getIdentifier();
+	console.log("Identifier", identifier);
 	const client = IS_PRODUCTION
 		? await Client.build(identifier, config)
 		: await Client.create(signer, config);
+	console.log("Client created");
 	return client;
 };

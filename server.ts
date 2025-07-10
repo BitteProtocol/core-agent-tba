@@ -27,8 +27,6 @@ async function main() {
 	const signer = createSigner(WALLET_KEY);
 	const dbEncryptionKey = getEncryptionKeyFromHex(ENCRYPTION_KEY);
 
-	console.log("IS_PRODUCTION", IS_PRODUCTION);
-
 	const config: ClientOptions = {
 		dbEncryptionKey,
 		env: XMTP_ENV as XmtpEnv,
