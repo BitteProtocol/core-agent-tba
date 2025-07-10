@@ -6,6 +6,7 @@ import {
 	Client,
 	type ClientOptions,
 	type ExtractCodecContentTypes,
+	getInboxIdForIdentifier,
 	IdentifierKind,
 	type Signer,
 } from "@xmtp/node-sdk";
@@ -13,7 +14,6 @@ import { fromString, toString as uint8ArrayToString } from "uint8arrays";
 import { createWalletClient, http, toBytes } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { sepolia } from "viem/chains";
-import { IS_PRODUCTION } from "@/helpers/config";
 
 interface User {
 	key: `0x${string}`;
@@ -172,11 +172,40 @@ export const getOrCreateClient = async (
 	signer: Signer,
 	config: ClientOptions,
 ): Promise<Client<ExtractCodecContentTypes<typeof config.codecs>>> => {
+	// try to build existing client gracefully
 	const identifier = await signer.getIdentifier();
-	console.log("Identifier", identifier);
-	const client = IS_PRODUCTION
-		? await Client.build(identifier, config)
-		: await Client.create(signer, config);
-	console.log("Client created");
+	try {
+		const client = await Client.build(identifier, config);
+		console.log("Built existing client ✅");
+		return client;
+	} catch (error) {
+		console.error(
+			"Error building client ❌",
+			error instanceof Error ? error.message : error,
+		);
+	}
+
+	// revoke all other installations
+	const inboxId = await getInboxIdForIdentifier(identifier, config.env);
+	if (inboxId) {
+		const inboxStates = await Client.inboxStateFromInboxIds(
+			[inboxId],
+			config.env,
+		);
+		const toRevokeInstallationBytes = inboxStates[0].installations.map(
+			(i) => i.bytes,
+		);
+		await Client.revokeInstallations(
+			signer,
+			inboxId,
+			toRevokeInstallationBytes,
+			config.env,
+		);
+		console.log("Revoked all other installations ␡");
+	}
+
+	// create a new client
+	const client = await Client.create(signer, config);
+	console.log("New client created ✅");
 	return client;
 };

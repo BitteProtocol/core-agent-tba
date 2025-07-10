@@ -33,18 +33,9 @@ async function main() {
 		// don't create local db files during development
 		dbPath: IS_PRODUCTION ? undefined : null,
 		codecs: [new ReactionCodec()],
-		disableAutoRegister: true,
 	};
 
 	const client = await getOrCreateClient(signer, config);
-
-	if (client.isRegistered) {
-		await client.revokeAllOtherInstallations();
-		console.log("Revoked all other installations");
-	} else {
-		await client.register();
-		console.log("Registered client");
-	}
 
 	void logAgentDetails(client);
 
