@@ -40,7 +40,7 @@ async function main() {
 			new WalletSendCallsCodec(),
 			new TransactionReferenceCodec(),
 		],
-		loggingLevel: LogLevel.debug,
+		loggingLevel: IS_PRODUCTION ? LogLevel.error : LogLevel.debug,
 	});
 
 	void logAgentDetails(client);
