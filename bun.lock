@@ -6,6 +6,8 @@
       "dependencies": {
         "@ai-sdk/openai": "^2.0.0-beta.6",
         "@xmtp/content-type-reaction": "^2.0.2",
+        "@xmtp/content-type-transaction-reference": "^2.0.2",
+        "@xmtp/content-type-wallet-send-calls": "^2.0.0",
         "@xmtp/node-sdk": "^3.1.1",
         "ai": "^5.0.0-beta.13",
         "dotenv": "^17.2.0",
@@ -95,6 +97,10 @@
     "@xmtp/content-type-reaction": ["@xmtp/content-type-reaction@2.0.2", "", { "dependencies": { "@xmtp/content-type-primitives": "^2.0.2" } }, "sha512-v7wGMycSsUi8NyLR+ytjDhNY4Nr4p8qNwKx8LZPlA8IwLacq2Bp2vKxlOAnGX7m5XP9ivpBNNZvkpR5Limvz1g=="],
 
     "@xmtp/content-type-text": ["@xmtp/content-type-text@2.0.2", "", { "dependencies": { "@xmtp/content-type-primitives": "^2.0.2" } }, "sha512-nlRufOYPrG5sNbruNPCsb6Qk9/jmJ5lMooPsZEo4Dbwda/2S4bSvrrIncT6if7M2SCha3hxtlgJlFGeTtHy4gQ=="],
+
+    "@xmtp/content-type-transaction-reference": ["@xmtp/content-type-transaction-reference@2.0.2", "", { "dependencies": { "@xmtp/content-type-primitives": "^2.0.2" } }, "sha512-7JwqZ3phX/XIZByY4XnteW/0c/XtPOeuEG3GayLOMELyEBJxoVog4evxFidoWb/vtEm9JuqqKqh8VtUaekhXYA=="],
+
+    "@xmtp/content-type-wallet-send-calls": ["@xmtp/content-type-wallet-send-calls@2.0.0", "", { "dependencies": { "@xmtp/content-type-primitives": "^2.0.2" } }, "sha512-212g68DjwFMh3gaAwULJvrhpuje6Tp4rF94oy3lQRvnXCQ+xLkyDi8pT5Pyw3Dm6jW+ke1U0hauzV7sLCgIFSw=="],
 
     "@xmtp/node-bindings": ["@xmtp/node-bindings@1.2.7", "", {}, "sha512-YhwU3qf073GuYSvR7CITQwzTqFYkG/uDFEhFGJY1De7iKJw0n6URBZ99fbGoZFdNacSgBBUDOPCypVdaMmSb/w=="],
 

@@ -168,44 +168,48 @@ export function validateEnvironment(vars: string[]): Record<string, string> {
 	}, {});
 }
 
-export const getOrCreateClient = async (
+export const createClientWithRevoke = async (
 	signer: Signer,
 	config: ClientOptions,
 ): Promise<Client<ExtractCodecContentTypes<typeof config.codecs>>> => {
-	// try to build existing client gracefully
+	// try to create new client, if it fails, revoke all other installations and try again
 	const identifier = await signer.getIdentifier();
 	try {
-		const client = await Client.build(identifier, config);
-		console.log("Built existing client ✅");
+		const client = await Client.create(signer, config);
+		console.log("New client created ✅");
+
+		// revoke all other installations
+		await client.revokeAllOtherInstallations();
+		console.log("Revoked all other installations ␡");
+
 		return client;
 	} catch (error) {
-		console.error(
-			"Error building client ❌",
-			error instanceof Error ? error.message : error,
-		);
+		console.error("Error creating client ❌", error);
 	}
 
-	// revoke all other installations
-	const inboxId = await getInboxIdForIdentifier(identifier, config.env);
-	if (inboxId) {
-		const inboxStates = await Client.inboxStateFromInboxIds(
-			[inboxId],
-			config.env,
-		);
-		const toRevokeInstallationBytes = inboxStates[0].installations.map(
-			(i) => i.bytes,
-		);
-		await Client.revokeInstallations(
-			signer,
-			inboxId,
-			toRevokeInstallationBytes,
-			config.env,
-		);
-		console.log("Revoked all other installations ␡");
+	try {
+		// revoke all other installations
+		const inboxId = await getInboxIdForIdentifier(identifier, config.env);
+		if (inboxId) {
+			const inboxStates = await Client.inboxStateFromInboxIds(
+				[inboxId],
+				config.env,
+			);
+			const toRevokeInstallationBytes = inboxStates[0].installations.map(
+				(i) => i.bytes,
+			);
+			console.log("To revoke installation bytes", toRevokeInstallationBytes);
+			await Client.revokeInstallations(
+				signer,
+				inboxId,
+				toRevokeInstallationBytes,
+				config.env,
+			);
+			console.log("Revoked all other installations ␡");
+		}
+		return await Client.create(signer, config);
+	} catch (error) {
+		console.error("Error revoking installations ❌", error);
+		throw error;
 	}
-
-	// create a new client
-	const client = await Client.create(signer, config);
-	console.log("New client created ✅");
-	return client;
 };

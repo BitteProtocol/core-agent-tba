@@ -1,15 +1,18 @@
 import { openai } from "@ai-sdk/openai";
 import {
 	ContentTypeReaction,
+	type Reaction,
 	ReactionCodec,
 } from "@xmtp/content-type-reaction";
-import type { ClientOptions, XmtpEnv } from "@xmtp/node-sdk";
+import { TransactionReferenceCodec } from "@xmtp/content-type-transaction-reference";
+import { WalletSendCallsCodec } from "@xmtp/content-type-wallet-send-calls";
+import { LogLevel, type XmtpEnv } from "@xmtp/node-sdk";
 import { generateText } from "ai";
 import { BitteAPIClient } from "@/helpers/bitte-client";
 import {
+	createClientWithRevoke,
 	createSigner,
 	getEncryptionKeyFromHex,
-	getOrCreateClient,
 	logAgentDetails,
 } from "@/helpers/client";
 import {
@@ -27,24 +30,29 @@ async function main() {
 	const signer = createSigner(WALLET_KEY);
 	const dbEncryptionKey = getEncryptionKeyFromHex(ENCRYPTION_KEY);
 
-	const config: ClientOptions = {
+	const client = await createClientWithRevoke(signer, {
 		dbEncryptionKey,
 		env: XMTP_ENV as XmtpEnv,
 		// don't create local db files during development
 		dbPath: IS_PRODUCTION ? undefined : null,
-		codecs: [new ReactionCodec()],
-	};
-
-	const client = await getOrCreateClient(signer, config);
+		codecs: [
+			new ReactionCodec(),
+			new WalletSendCallsCodec(),
+			new TransactionReferenceCodec(),
+		],
+		loggingLevel: LogLevel.debug,
+	});
 
 	void logAgentDetails(client);
 
 	/* Sync the conversations from the network to update the local db */
 	await client.conversations.sync();
 
-	// Stream all messages for GPT responses
+	// Stream all messages
 	const messageStream = () => {
+		console.log("Starting message stream");
 		void client.conversations.streamAllMessages((error, message) => {
+			console.log("Message received", message);
 			if (error) {
 				console.error("Error in message stream:", error);
 				return;
@@ -62,6 +70,7 @@ async function main() {
 				) {
 					return;
 				}
+				console.log("Message received", message.content);
 				/* Get the conversation from the local db */
 				const conversation = await client.conversations.getConversationById(
 					message.conversationId,
@@ -69,6 +78,7 @@ async function main() {
 
 				/* If the conversation is not found, skip the message */
 				if (!conversation) {
+					console.error("Conversation not found", message.conversationId);
 					return;
 				}
 
@@ -91,7 +101,7 @@ async function main() {
 
 				try {
 					// Add a reaction to the received message
-					const reaction = {
+					const reaction: Reaction = {
 						reference: message.id,
 						action: "added",
 						content: emoji.text,
