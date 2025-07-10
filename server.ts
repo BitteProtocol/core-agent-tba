@@ -1,3 +1,7 @@
+import {
+	ContentTypeReaction,
+	ReactionCodec,
+} from "@xmtp/content-type-reaction";
 import { Client, type XmtpEnv } from "@xmtp/node-sdk";
 import { BitteAPIClient } from "@/helpers/bitte-client";
 import {
@@ -6,6 +10,8 @@ import {
 	logAgentDetails,
 } from "@/helpers/client";
 import { ENCRYPTION_KEY, WALLET_KEY, XMTP_ENV } from "@/helpers/config";
+import { generateText } from "ai";
+import { openai } from "@ai-sdk/openai";
 
 /**
  * Main function to run the agent
@@ -20,6 +26,7 @@ async function main() {
 		env: XMTP_ENV as XmtpEnv,
 		// don't create local db files during development
 		dbPath: process.env.NODE_ENV === "production" ? undefined : null,
+		codecs: [new ReactionCodec()],
 		disableAutoRegister: true,
 	});
 
@@ -29,7 +36,8 @@ async function main() {
 		await client.register();
 	}
 
-	void logAgentDetails(client);
+	// biome-ignore lint/suspicious/noExplicitAny: XMTP client type incompatibility
+	void logAgentDetails(client as any);
 
 	/* Sync the conversations from the network to update the local db */
 	await client.conversations.sync();
@@ -76,7 +84,23 @@ async function main() {
 						? message.content
 						: JSON.stringify(message.content);
 
+				const emoji = await generateText({
+					model: openai("gpt-4.1-nano"),
+					prompt: `Return only a single emoji that matches the sentiment of this message: ${messageString.substring(0, 100)}. Do not include any other text or explanation.`,
+				});
+
 				try {
+					// Add a reaction to the received message
+					const reaction = {
+						reference: message.id,
+						action: "added",
+						content: emoji.text,
+						schema: "unicode",
+					};
+
+					// biome-ignore lint/suspicious/noExplicitAny: XMTP reaction type incompatibility
+					await conversation.send(reaction as any, ContentTypeReaction);
+
 					/* Get the AI response */
 					const completion = await bitteClient.sendToAgent({
 						message: messageString,

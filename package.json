@@ -12,7 +12,10 @@
 		"check:fix": "biome check --write"
 	},
 	"dependencies": {
+		"@ai-sdk/openai": "^2.0.0-beta.6",
+		"@xmtp/content-type-reaction": "^2.0.2",
 		"@xmtp/node-sdk": "^3.1.1",
+		"ai": "^5.0.0-beta.13",
 		"dotenv": "^17.2.0",
 		"uint8arrays": "^5.1.0",
 		"viem": "^2.31.7"
