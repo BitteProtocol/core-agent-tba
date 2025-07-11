@@ -6,6 +6,7 @@
       "dependencies": {
         "@ai-sdk/openai": "^1.2.0",
         "@xmtp/content-type-reaction": "^2.0.2",
+        "@xmtp/content-type-reply": "^2.0.2",
         "@xmtp/content-type-transaction-reference": "^2.0.2",
         "@xmtp/content-type-wallet-send-calls": "^2.0.0",
         "@xmtp/node-sdk": "^3.1.1",
@@ -582,6 +583,8 @@
     "@xmtp/content-type-primitives": ["@xmtp/content-type-primitives@2.0.2", "", { "dependencies": { "@xmtp/proto": "^3.78.0" } }, "sha512-OTUsCD48sO2Eg69dfre32OSnXSkmefbSZA4L0S58LqYK6+hMymFRRjEH4fvPzXc9WCw5FmCYEG7DFAaB680HiQ=="],
 
     "@xmtp/content-type-reaction": ["@xmtp/content-type-reaction@2.0.2", "", { "dependencies": { "@xmtp/content-type-primitives": "^2.0.2" } }, "sha512-v7wGMycSsUi8NyLR+ytjDhNY4Nr4p8qNwKx8LZPlA8IwLacq2Bp2vKxlOAnGX7m5XP9ivpBNNZvkpR5Limvz1g=="],
+
+    "@xmtp/content-type-reply": ["@xmtp/content-type-reply@2.0.2", "", { "dependencies": { "@xmtp/content-type-primitives": "^2.0.2", "@xmtp/proto": "^3.78.0" } }, "sha512-tks5WEevzOzUTmpvpJjxLH5jil3cHSddWgS5MPfm8bGU5hCUfy8uojlVaFEUbBBjpDVwU1o++SW5h5HggHKsgg=="],
 
     "@xmtp/content-type-text": ["@xmtp/content-type-text@2.0.2", "", { "dependencies": { "@xmtp/content-type-primitives": "^2.0.2" } }, "sha512-nlRufOYPrG5sNbruNPCsb6Qk9/jmJ5lMooPsZEo4Dbwda/2S4bSvrrIncT6if7M2SCha3hxtlgJlFGeTtHy4gQ=="],
 

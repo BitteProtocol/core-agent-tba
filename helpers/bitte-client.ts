@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { ToolInvocation } from "ai";
+import { generateId, type ToolInvocation } from "ai";
 import {
 	BITTE_API_KEY,
 	CHAT_API_URL,
@@ -54,10 +54,12 @@ export class BitteAPIClient {
 		message,
 		walletInfo,
 		agentId = DEFAULT_AGENT_ID,
+		systemMessage,
 	}: {
 		message: string;
 		walletInfo?: WalletInfo;
 		agentId?: string;
+		systemMessage?: string;
 	}): Promise<{
 		messageId: string;
 		content: string;
@@ -76,6 +78,16 @@ export class BitteAPIClient {
 		const payload = {
 			id: this.chatId,
 			messages: [
+				...(systemMessage
+					? [
+							{
+								id: generateId(),
+								createdAt: timestamp,
+								role: "system",
+								content: systemMessage,
+							},
+						]
+					: []),
 				{
 					id: messageId,
 					createdAt: timestamp,

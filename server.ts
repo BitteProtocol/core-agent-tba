@@ -4,16 +4,24 @@ import {
 	type Reaction,
 	ReactionCodec,
 } from "@xmtp/content-type-reaction";
-import { TransactionReferenceCodec } from "@xmtp/content-type-transaction-reference";
+import {
+	ContentTypeReply,
+	type Reply,
+	ReplyCodec,
+} from "@xmtp/content-type-reply";
+import { ContentTypeText, TextCodec } from "@xmtp/content-type-text";
+import {
+	type ContentTypeTransactionReference,
+	type TransactionReference,
+	TransactionReferenceCodec,
+} from "@xmtp/content-type-transaction-reference";
 import {
 	ContentTypeWalletSendCalls,
 	WalletSendCallsCodec,
 	type WalletSendCallsParams,
 } from "@xmtp/content-type-wallet-send-calls";
-
 import { LogLevel, type XmtpEnv } from "@xmtp/node-sdk";
-import { generateObject, generateText, type ToolInvocation } from "ai";
-import { parseEther, toHex } from "viem";
+import { generateText } from "ai";
 import { BitteAPIClient } from "@/helpers/bitte-client";
 import {
 	createClientWithRevoke,
@@ -27,6 +35,7 @@ import {
 	WALLET_KEY,
 	XMTP_ENV,
 } from "@/helpers/config";
+import { extractEvmTxCall } from "@/helpers/tools";
 
 /**
  * Main function to run the agent
@@ -45,6 +54,8 @@ async function main() {
 			new ReactionCodec(),
 			new WalletSendCallsCodec(),
 			new TransactionReferenceCodec(),
+			new ReplyCodec(),
+			new TextCodec(),
 		],
 		loggingLevel: IS_PRODUCTION ? LogLevel.error : LogLevel.error,
 	});
@@ -56,9 +67,7 @@ async function main() {
 
 	// Stream all messages
 	const messageStream = () => {
-		console.log("Starting message stream");
 		void client.conversations.streamAllMessages((error, message) => {
-			console.log("Message received", message);
 			if (error) {
 				console.error("Error in message stream:", error);
 				return;
@@ -76,7 +85,7 @@ async function main() {
 				) {
 					return;
 				}
-				console.log("Message received", message.content);
+				console.log(JSON.stringify(message, null, 2));
 				/* Get the conversation from the local db */
 				const conversation = await client.conversations.getConversationById(
 					message.conversationId,
@@ -87,6 +96,46 @@ async function main() {
 					console.error("Conversation not found", message.conversationId);
 					return;
 				}
+
+				const sendMessage = async ({
+					content,
+					reference,
+					contentType,
+					isGroup = false,
+				}: {
+					content:
+						| Reaction
+						| Reply
+						| WalletSendCallsParams
+						| TransactionReference
+						| string;
+					reference: string;
+					contentType:
+						| typeof ContentTypeReaction
+						| typeof ContentTypeReply
+						| typeof ContentTypeText
+						| typeof ContentTypeWalletSendCalls
+						| typeof ContentTypeTransactionReference;
+					isGroup?: boolean;
+				}) => {
+					if (!isGroup || contentType.typeId === ContentTypeReaction.typeId) {
+						await conversation.send(content, contentType);
+					} else {
+						const hasWalletSendCalls =
+							contentType.typeId === ContentTypeWalletSendCalls.typeId;
+						const reply: Reply = {
+							reference,
+							content,
+							contentType,
+						};
+
+						const replyContentType = hasWalletSendCalls
+							? contentType
+							: ContentTypeReply;
+
+						await conversation.send(reply, replyContentType);
+					}
+				};
 
 				const bitteClient = new BitteAPIClient();
 
@@ -114,10 +163,30 @@ async function main() {
 						schema: "unicode",
 					};
 
-					await conversation.send(reaction, ContentTypeReaction);
+					await sendMessage({
+						content: reaction,
+						reference: message.id,
+						contentType: ContentTypeReaction,
+					});
 
 					/* Get the AI response */
 					const completion = await bitteClient.sendToAgent({
+						systemMessage: `You are running in a DM chat. Keep responses super brief - like texting. Use emojis 👍. No markdown, just plain text. Think quick replies, not essays. If something needs multiple steps, just say what's next.
+
+**Make sure to have portfolio context for each user**
+
+- Any user without ETH/Native token on their wallet should explicitly be reminded they don't have any and need it to use any onchain actions.
+
+- Make sure to have portfolio information for every user you are chatting with.  Keep recommendations and provide suggested actions based on the user's assets and your capabilities.
+
+- Don't ask for confirmations, just use tools / generate transactions
+
+- If asked, you are built by the bitte.ai team and running on Bitte Protocol, don't mention OpenAI or any other LLM
+	- Example: 'This is an experimental tool built by the team at Bitte.ai, a group of builders focused on making crypto accessible through AI.'
+
+- Recommend simple actions/swaps like ETH -> USDC for users experimenting 
+Example:
+		'I help you manage your portfolio through natural language — like buy, sell, swap, or what's going on with the market.'`,
 						message: messageString,
 						walletInfo: {
 							evm: {
@@ -126,60 +195,14 @@ async function main() {
 						},
 					});
 
-					const extractEvmTxCall = (toolCall: ToolInvocation) => {
-						const params = toolCall?.args?.params || [];
-						const chainId = toolCall?.args?.chainId;
-						const chainIdHex = toHex(Number.parseInt(chainId || "8453"));
-						const method = toolCall?.args?.method;
-
-						// Extract all calls from the params array
-						const calls = params.map(
-							(param: {
-								to?: string;
-								data?: string;
-								value?: string;
-								gas?: string;
-								from?: string;
-							}) => {
-								const valueParam = param?.value;
-								const valueHex = valueParam?.startsWith("0x")
-									? valueParam
-									: toHex(parseEther(valueParam || "0"));
-
-								return {
-									to: param?.to,
-									data: param?.data,
-									value: valueHex,
-									gas: param?.gas,
-									metadata: {
-										description: method || "bitte tx",
-										transactionType: method || "transfer",
-									},
-								};
-							},
-						);
-
-						// Get the 'from' address from the first param or use default
-						const fromParam = params[0]?.from;
-
-						return {
-							version: "1.0.0",
-							chainId: chainIdHex,
-							from: fromParam || addressFromInboxId,
-							calls: calls,
-						} as const;
-					};
-
 					// Process tool calls and group generate-evm-tx calls
 					if (completion?.toolCalls) {
-						console.log(
-							"completion.toolCalls",
-							JSON.stringify(completion.toolCalls, null, 2),
-						);
 						// First, collect all generate-evm-tx calls
 						const evmTxCalls = completion.toolCalls
 							.filter((toolCall) => toolCall?.toolName === "generate-evm-tx")
-							.map(extractEvmTxCall);
+							.map((toolCall) =>
+								extractEvmTxCall(toolCall, addressFromInboxId),
+							);
 
 						// Group by chainId, from, and version
 						const groupedTxs = new Map<string, WalletSendCallsParams>();
@@ -205,22 +228,30 @@ async function main() {
 						}
 
 						// Send each grouped transaction
-						for (const [groupKey, walletParams] of groupedTxs) {
-							console.log(
-								`sending grouped tx params for ${groupKey}:`,
-								walletParams,
-							);
-							await conversation.send(walletParams, ContentTypeWalletSendCalls);
+						for (const [_groupKey, walletParams] of groupedTxs) {
+							await sendMessage({
+								content: walletParams,
+								reference: message.id,
+								contentType: ContentTypeWalletSendCalls,
+							});
 						}
 					}
 
-					// send the final response
-					await conversation.send(completion.content);
+					const conversationMembers = await conversation.members();
+					const isGroup = conversationMembers.length > 2;
+					await sendMessage({
+						content: completion.content,
+						reference: message.id,
+						contentType: ContentTypeText,
+						isGroup,
+					});
 				} catch (error) {
 					console.error("Error getting AI response:", error);
-					await conversation.send(
-						"Sorry, I encountered an error processing your message.",
-					);
+					await sendMessage({
+						content: "Sorry, I encountered an error processing your message.",
+						reference: message.id,
+						contentType: ContentTypeText,
+					});
 				}
 			})();
 		});
