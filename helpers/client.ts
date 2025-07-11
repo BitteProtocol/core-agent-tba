@@ -1,10 +1,25 @@
 import { getRandomValues } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import type { Reaction, ReactionCodec } from "@xmtp/content-type-reaction";
+import {
+	ContentTypeReaction,
+	type Reaction,
+	type ReactionCodec,
+} from "@xmtp/content-type-reaction";
+import { ContentTypeReply, type Reply } from "@xmtp/content-type-reply";
+import type { ContentTypeText } from "@xmtp/content-type-text";
+import type {
+	ContentTypeTransactionReference,
+	TransactionReference,
+} from "@xmtp/content-type-transaction-reference";
+import {
+	ContentTypeWalletSendCalls,
+	type WalletSendCallsParams,
+} from "@xmtp/content-type-wallet-send-calls";
 import {
 	Client,
 	type ClientOptions,
+	type Conversation,
 	type ExtractCodecContentTypes,
 	getInboxIdForIdentifier,
 	IdentifierKind,
@@ -211,5 +226,48 @@ export const createClientWithRevoke = async (
 	} catch (error) {
 		console.error("Error revoking installations ❌", error);
 		throw error;
+	}
+};
+
+export const sendMessage = async (
+	conversation: Conversation,
+	{
+		content,
+		reference,
+		contentType,
+		isGroup = false,
+	}: {
+		content:
+			| Reaction
+			| Reply
+			| WalletSendCallsParams
+			| TransactionReference
+			| string;
+		reference: string;
+		contentType:
+			| typeof ContentTypeReaction
+			| typeof ContentTypeReply
+			| typeof ContentTypeText
+			| typeof ContentTypeWalletSendCalls
+			| typeof ContentTypeTransactionReference;
+		isGroup?: boolean;
+	},
+) => {
+	if (!isGroup || contentType.typeId === ContentTypeReaction.typeId) {
+		await conversation.send(content, contentType);
+	} else {
+		const hasWalletSendCalls =
+			contentType.typeId === ContentTypeWalletSendCalls.typeId;
+		const reply: Reply = {
+			reference,
+			content,
+			contentType,
+		};
+
+		const replyContentType = hasWalletSendCalls
+			? contentType
+			: ContentTypeReply;
+
+		await conversation.send(reply, replyContentType);
 	}
 };

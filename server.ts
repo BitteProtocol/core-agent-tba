@@ -4,17 +4,9 @@ import {
 	type Reaction,
 	ReactionCodec,
 } from "@xmtp/content-type-reaction";
-import {
-	ContentTypeReply,
-	type Reply,
-	ReplyCodec,
-} from "@xmtp/content-type-reply";
+import { ReplyCodec } from "@xmtp/content-type-reply";
 import { ContentTypeText, TextCodec } from "@xmtp/content-type-text";
-import {
-	type ContentTypeTransactionReference,
-	type TransactionReference,
-	TransactionReferenceCodec,
-} from "@xmtp/content-type-transaction-reference";
+import { TransactionReferenceCodec } from "@xmtp/content-type-transaction-reference";
 import {
 	ContentTypeWalletSendCalls,
 	WalletSendCallsCodec,
@@ -28,6 +20,7 @@ import {
 	createSigner,
 	getEncryptionKeyFromHex,
 	logAgentDetails,
+	sendMessage,
 } from "@/helpers/client";
 import {
 	ENCRYPTION_KEY,
@@ -97,46 +90,6 @@ async function main() {
 					return;
 				}
 
-				const sendMessage = async ({
-					content,
-					reference,
-					contentType,
-					isGroup = false,
-				}: {
-					content:
-						| Reaction
-						| Reply
-						| WalletSendCallsParams
-						| TransactionReference
-						| string;
-					reference: string;
-					contentType:
-						| typeof ContentTypeReaction
-						| typeof ContentTypeReply
-						| typeof ContentTypeText
-						| typeof ContentTypeWalletSendCalls
-						| typeof ContentTypeTransactionReference;
-					isGroup?: boolean;
-				}) => {
-					if (!isGroup || contentType.typeId === ContentTypeReaction.typeId) {
-						await conversation.send(content, contentType);
-					} else {
-						const hasWalletSendCalls =
-							contentType.typeId === ContentTypeWalletSendCalls.typeId;
-						const reply: Reply = {
-							reference,
-							content,
-							contentType,
-						};
-
-						const replyContentType = hasWalletSendCalls
-							? contentType
-							: ContentTypeReply;
-
-						await conversation.send(reply, replyContentType);
-					}
-				};
-
 				const bitteClient = new BitteAPIClient();
 
 				const inboxState = await client.preferences.inboxStateFromInboxIds([
@@ -163,7 +116,7 @@ async function main() {
 						schema: "unicode",
 					};
 
-					await sendMessage({
+					await sendMessage(conversation, {
 						content: reaction,
 						reference: message.id,
 						contentType: ContentTypeReaction,
@@ -229,7 +182,7 @@ Example:
 
 						// Send each grouped transaction
 						for (const [_groupKey, walletParams] of groupedTxs) {
-							await sendMessage({
+							await sendMessage(conversation, {
 								content: walletParams,
 								reference: message.id,
 								contentType: ContentTypeWalletSendCalls,
@@ -239,7 +192,7 @@ Example:
 
 					const conversationMembers = await conversation.members();
 					const isGroup = conversationMembers.length > 2;
-					await sendMessage({
+					await sendMessage(conversation, {
 						content: completion.content,
 						reference: message.id,
 						contentType: ContentTypeText,
@@ -247,7 +200,7 @@ Example:
 					});
 				} catch (error) {
 					console.error("Error getting AI response:", error);
-					await sendMessage({
+					await sendMessage(conversation, {
 						content: "Sorry, I encountered an error processing your message.",
 						reference: message.id,
 						contentType: ContentTypeText,
