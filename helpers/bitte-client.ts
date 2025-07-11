@@ -388,4 +388,3 @@ export class BitteAPIClient {
 		}
 	}
 }
-

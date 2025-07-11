@@ -12,7 +12,8 @@ import {
 } from "@xmtp/content-type-wallet-send-calls";
 
 import { LogLevel, type XmtpEnv } from "@xmtp/node-sdk";
-import { generateText, tool, type ToolInvocation } from "ai";
+import { generateText, type ToolInvocation } from "ai";
+import { parseEther, toHex } from "viem";
 import { BitteAPIClient } from "@/helpers/bitte-client";
 import {
 	createClientWithRevoke,
@@ -45,7 +46,7 @@ async function main() {
 			new WalletSendCallsCodec(),
 			new TransactionReferenceCodec(),
 		],
-		loggingLevel: IS_PRODUCTION ? LogLevel.error : LogLevel.info,
+		loggingLevel: IS_PRODUCTION ? LogLevel.error : LogLevel.error,
 	});
 
 	void logAgentDetails(client);
@@ -125,42 +126,91 @@ async function main() {
 						},
 					});
 
-					const handleEvmTx = (
-						toolCall: ToolInvocation,
-					): WalletSendCallsParams => {
-						const params: WalletSendCallsParams = {
-							version: "1.0.0",
-							chainId: toolCall?.args?.chainId || undefined,
-							from: toolCall?.args?.params?.[0]?.from || addressFromInboxId,
-							calls: [
-								{
-									to: toolCall?.args?.params?.[0]?.to || undefined,
-									data: toolCall?.args?.params?.[0]?.data || undefined,
-									value: toolCall?.args?.params?.[0]?.value || undefined,
-									gas: toolCall?.args?.params?.[0]?.gas || undefined,
+					const extractEvmTxCall = (toolCall: ToolInvocation) => {
+						const params = toolCall?.args?.params || [];
+						const chainId = toolCall?.args?.chainId;
+						const chainIdHex = toHex(Number.parseInt(chainId || "8453"));
+						const method = toolCall?.args?.method;
+
+						// Extract all calls from the params array
+						const calls = params.map(
+							(param: {
+								to?: string;
+								data?: string;
+								value?: string;
+								gas?: string;
+								from?: string;
+							}) => {
+								const valueParam = param?.value;
+								const valueHex = valueParam?.startsWith("0x")
+									? valueParam
+									: toHex(parseEther(valueParam || "0"));
+
+								return {
+									to: param?.to,
+									data: param?.data,
+									value: valueHex,
+									gas: param?.gas,
 									metadata: {
 										description: `bitte agent tx from xmtp`,
-										transactionType:
-											toolCall?.args?.params?.[0]?.method || "transfer",
+										transactionType: method || "transfer",
 									},
-								},
-							],
-						};
-						return params;
+								};
+							},
+						);
+
+						// Get the 'from' address from the first param or use default
+						const fromParam = params[0]?.from;
+
+						return {
+							version: "1.0.0",
+							chainId: chainIdHex,
+							from: fromParam || addressFromInboxId,
+							calls: calls,
+						} as const;
 					};
 
-					// reverse the tool calls to send them in the correct order
+					// Process tool calls and group generate-evm-tx calls
 					if (completion?.toolCalls) {
-						for (const toolCall of completion.toolCalls) {
-							// WalletSendCallsParams
-							if (toolCall?.toolName === "generate-evm-tx") {
-								const walletParams = handleEvmTx(toolCall);
-								console.log("sending tx params", walletParams);
-								await conversation.send(
-									walletParams,
-									ContentTypeWalletSendCalls,
-								);
+						console.log(
+							"completion.toolCalls",
+							JSON.stringify(completion.toolCalls, null, 2),
+						);
+						// First, collect all generate-evm-tx calls
+						const evmTxCalls = completion.toolCalls
+							.filter((toolCall) => toolCall?.toolName === "generate-evm-tx")
+							.map(extractEvmTxCall);
+
+						// Group by chainId, from, and version
+						const groupedTxs = new Map<string, WalletSendCallsParams>();
+
+						for (const txCall of evmTxCalls) {
+							const groupKey = `${txCall.chainId}-${txCall.from}-${txCall.version}`;
+
+							if (groupedTxs.has(groupKey)) {
+								// Add to existing group
+								const existingGroup = groupedTxs.get(groupKey);
+								if (existingGroup) {
+									existingGroup.calls.push(...txCall.calls);
+								}
+							} else {
+								// Create new group
+								groupedTxs.set(groupKey, {
+									version: txCall.version,
+									chainId: txCall.chainId,
+									from: txCall.from,
+									calls: txCall.calls,
+								});
 							}
+						}
+
+						// Send each grouped transaction
+						for (const [groupKey, walletParams] of groupedTxs) {
+							console.log(
+								`sending grouped tx params for ${groupKey}:`,
+								walletParams,
+							);
+							await conversation.send(walletParams, ContentTypeWalletSendCalls);
 						}
 					}
 
