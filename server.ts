@@ -12,7 +12,7 @@ import {
 } from "@xmtp/content-type-wallet-send-calls";
 
 import { LogLevel, type XmtpEnv } from "@xmtp/node-sdk";
-import { generateText, type ToolInvocation } from "ai";
+import { generateObject, generateText, type ToolInvocation } from "ai";
 import { parseEther, toHex } from "viem";
 import { BitteAPIClient } from "@/helpers/bitte-client";
 import {
@@ -152,7 +152,7 @@ async function main() {
 									value: valueHex,
 									gas: param?.gas,
 									metadata: {
-										description: `bitte agent tx from xmtp`,
+										description: method || "bitte tx",
 										transactionType: method || "transfer",
 									},
 								};
