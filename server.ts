@@ -4,7 +4,7 @@ import {
 	type Reaction,
 	ReactionCodec,
 } from "@xmtp/content-type-reaction";
-import { ReplyCodec } from "@xmtp/content-type-reply";
+import { ContentTypeReply, ReplyCodec } from "@xmtp/content-type-reply";
 import { ContentTypeText, TextCodec } from "@xmtp/content-type-text";
 import { TransactionReferenceCodec } from "@xmtp/content-type-transaction-reference";
 import {
@@ -23,6 +23,7 @@ import {
 	sendMessage,
 } from "@/helpers/client";
 import {
+	AGENT_CHAT_ID,
 	ENCRYPTION_KEY,
 	IS_PRODUCTION,
 	WALLET_KEY,
@@ -70,15 +71,40 @@ async function main() {
 			}
 
 			void (async () => {
-				/* Ignore messages from the same agent or non-text messages */
+				console.log("message", JSON.stringify(message, null, 2));
+
+				const isTextMessage = message.contentType?.sameAs(ContentTypeText);
+				const isReplyMessage = message.contentType?.sameAs(ContentTypeReply);
+
+				// ignore non-text and non-reply messages
+				if (!isTextMessage && !isReplyMessage) {
+					console.log(
+						"ignoring non-text and non-reply message",
+						JSON.stringify(message, null, 2),
+					);
+					return;
+				}
+
+				// ignore messages from the agent
 				if (
-					message.senderInboxId.toLowerCase() ===
-						client.inboxId.toLowerCase() ||
-					message.contentType?.typeId !== "text"
+					message.senderInboxId.toLowerCase() === client.inboxId.toLowerCase()
 				) {
 					return;
 				}
-				console.log(JSON.stringify(message, null, 2));
+
+				// handle reply messages
+				if (isReplyMessage) {
+					const replyReference = message.parameters?.reference;
+					const clientInboxId = client.inboxId;
+					const referenceMessage =
+						client.conversations.getMessageById(replyReference);
+					const isReplyToAgent =
+						referenceMessage?.senderInboxId === clientInboxId;
+					if (!isReplyToAgent) {
+						return;
+					}
+				}
+
 				/* Get the conversation from the local db */
 				const conversation = await client.conversations.getConversationById(
 					message.conversationId,
@@ -90,7 +116,18 @@ async function main() {
 					return;
 				}
 
-				const bitteClient = new BitteAPIClient();
+				const conversationMembers = await conversation.members();
+				const isGroup = conversationMembers.length > 2;
+
+				// ignore text messages not mentioning or replying to the agent in a group
+				if (isGroup && isTextMessage) {
+					const isMentioningAgent = message.content?.includes(
+						`@${AGENT_CHAT_ID}`,
+					);
+					if (!isMentioningAgent) {
+						return;
+					}
+				}
 
 				const inboxState = await client.preferences.inboxStateFromInboxIds([
 					message.senderInboxId,
@@ -120,7 +157,10 @@ async function main() {
 						content: reaction,
 						reference: message.id,
 						contentType: ContentTypeReaction,
+						isGroup,
 					});
+
+					const bitteClient = new BitteAPIClient();
 
 					/* Get the AI response */
 					const completion = await bitteClient.sendToAgent({
@@ -186,12 +226,11 @@ Example:
 								content: walletParams,
 								reference: message.id,
 								contentType: ContentTypeWalletSendCalls,
+								isGroup,
 							});
 						}
 					}
 
-					const conversationMembers = await conversation.members();
-					const isGroup = conversationMembers.length > 2;
 					await sendMessage(conversation, {
 						content: completion.content,
 						reference: message.id,
@@ -204,6 +243,7 @@ Example:
 						content: "Sorry, I encountered an error processing your message.",
 						reference: message.id,
 						contentType: ContentTypeText,
+						isGroup,
 					});
 				}
 			})();

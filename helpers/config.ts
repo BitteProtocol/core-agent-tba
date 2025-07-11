@@ -16,6 +16,7 @@ export const {
 	DEFAULT_AGENT_ID,
 	NETWORKS,
 	IS_PRODUCTION,
+	AGENT_CHAT_ID,
 } = (() => {
 	const {
 		WALLET_KEY,
@@ -78,5 +79,6 @@ export const {
 		BITTE_AGENT_ID,
 		OPENAI_API_KEY,
 		IS_PRODUCTION: NODE_ENV === "production",
+		AGENT_CHAT_ID: NODE_ENV === "production" ? "bitte.base.eth" : "0x4109…0848",
 	};
 })();
