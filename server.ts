@@ -194,7 +194,7 @@ async function main() {
 					});
 					console.log("✅ Reaction sent successfully");
 
-					const chatId = `xmptp-${addressFromInboxId}`;
+					const chatId = `xmtp-${addressFromInboxId}`;
 					console.log("🤖 Creating Bitte API client for chat ID:", chatId);
 					const bitteClient = new BitteAPIClient(chatId);
 
