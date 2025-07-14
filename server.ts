@@ -228,21 +228,15 @@ Example:
 						message: messageString,
 						evmAddress: addressFromInboxId,
 					});
-					console.log("✅ AI response received");
-					console.log("   - Content:", completion.content);
-					console.log("   - Tool calls:", completion?.toolCalls?.length || 0);
 
 					// Process tool calls and group generate-evm-tx calls
 					if (completion?.toolCalls) {
-						console.log("🔧 Processing tool calls...");
 						// First, collect all generate-evm-tx calls
 						const evmTxCalls = completion.toolCalls
 							.filter((toolCall) => toolCall?.toolName === "generate-evm-tx")
 							.map((toolCall) =>
 								extractEvmTxCall(toolCall, addressFromInboxId),
 							);
-
-						console.log("   - EVM transaction calls found:", evmTxCalls.length);
 
 						// Group by chainId, from, and version
 						const groupedTxs = new Map<string, WalletSendCallsParams>();
