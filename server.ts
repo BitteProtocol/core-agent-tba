@@ -35,10 +35,18 @@ import { extractEvmTxCall } from "@/helpers/tools";
  * Main function to run the agent
  */
 async function main() {
+	console.log("🚀 Starting XMTP agent...");
+	console.log("📋 Environment:", IS_PRODUCTION ? "PRODUCTION" : "DEVELOPMENT");
+	console.log("🌐 XMTP Environment:", XMTP_ENV);
+	console.log("💬 Agent Chat ID:", AGENT_CHAT_ID);
+
 	/* Create the signer using viem and parse the encryption key for the local db */
+	console.log("🔑 Creating signer and encryption key...");
 	const signer = createSigner(WALLET_KEY);
 	const dbEncryptionKey = getEncryptionKeyFromHex(ENCRYPTION_KEY);
+	console.log("✅ Signer created successfully");
 
+	console.log("📡 Creating XMTP client...");
 	const client = await createClientWithRevoke(signer, {
 		dbEncryptionKey,
 		env: XMTP_ENV as XmtpEnv,
@@ -53,35 +61,43 @@ async function main() {
 		],
 		loggingLevel: IS_PRODUCTION ? LogLevel.error : LogLevel.error,
 	});
+	console.log("✅ XMTP client created successfully");
+	console.log("📧 Client inbox ID:", client.inboxId);
 
 	void logAgentDetails(client);
 
 	/* Sync the conversations from the network to update the local db */
+	console.log("🔄 Syncing conversations...");
 	await client.conversations.sync();
+	console.log("✅ Conversations synced successfully");
 
 	// Stream all messages
 	const messageStream = () => {
+		console.log("📨 Starting message stream...");
 		void client.conversations.streamAllMessages((error, message) => {
 			if (error) {
-				console.error("Error in message stream:", error);
+				console.error("❌ Error in message stream:", error);
 				return;
 			}
 			if (!message) {
+				console.log("⚠️ Received empty message, skipping");
 				return;
 			}
 
 			void (async () => {
-				console.log("message", JSON.stringify(message, null, 2));
+				console.log("📩 New message received:");
+				console.log("   - Message ID:", message.id);
+				console.log("   - Conversation ID:", message.conversationId);
+				console.log("   - Sender Inbox ID:", message.senderInboxId);
+				console.log("   - Content Type:", message.contentType?.typeId);
+				console.log("   - Content:", typeof message.content === "string" ? message.content : JSON.stringify(message.content));
 
 				const isTextMessage = message.contentType?.sameAs(ContentTypeText);
 				const isReplyMessage = message.contentType?.sameAs(ContentTypeReply);
 
 				// ignore non-text and non-reply messages
 				if (!isTextMessage && !isReplyMessage) {
-					console.log(
-						"ignoring non-text and non-reply message",
-						JSON.stringify(message, null, 2),
-					);
+					console.log("⏭️ Ignoring non-text and non-reply message");
 					return;
 				}
 
@@ -89,63 +105,80 @@ async function main() {
 				if (
 					message.senderInboxId.toLowerCase() === client.inboxId.toLowerCase()
 				) {
+					console.log("⏭️ Ignoring message from agent itself");
 					return;
 				}
 
 				// handle reply messages
 				if (isReplyMessage) {
+					console.log("🔄 Processing reply message");
 					const replyReference = message.parameters?.reference;
 					const clientInboxId = client.inboxId;
 					const referenceMessage =
 						client.conversations.getMessageById(replyReference);
 					const isReplyToAgent =
 						referenceMessage?.senderInboxId === clientInboxId;
+					console.log("   - Reply reference:", replyReference);
+					console.log("   - Is reply to agent:", isReplyToAgent);
 					if (!isReplyToAgent) {
+						console.log("⏭️ Reply is not to agent, skipping");
 						return;
 					}
 				}
 
 				/* Get the conversation from the local db */
+				console.log("🔍 Getting conversation from local db...");
 				const conversation = await client.conversations.getConversationById(
 					message.conversationId,
 				);
 
 				/* If the conversation is not found, skip the message */
 				if (!conversation) {
-					console.error("Conversation not found", message.conversationId);
+					console.error("❌ Conversation not found:", message.conversationId);
 					return;
 				}
+				console.log("✅ Conversation found");
 
 				const conversationMembers = await conversation.members();
 				const isGroup = conversationMembers.length > 2;
+				console.log("👥 Conversation members:", conversationMembers.length);
+				console.log("   - Is group:", isGroup);
 
 				// ignore text messages not mentioning or replying to the agent in a group
 				if (isGroup && isTextMessage) {
+					console.log("🔍 Checking if agent is mentioned in group message...");
 					const isMentioningAgent = message.content?.includes(
 						`@${AGENT_CHAT_ID}`,
 					);
+					console.log("   - Agent mentioned:", isMentioningAgent);
 					if (!isMentioningAgent) {
+						console.log("⏭️ Agent not mentioned in group message, skipping");
 						return;
 					}
 				}
 
+				console.log("🔍 Getting inbox state for sender...");
 				const inboxState = await client.preferences.inboxStateFromInboxIds([
 					message.senderInboxId,
 				]);
 				const addressFromInboxId = inboxState[0].identifiers[0].identifier;
+				console.log("   - Sender address:", addressFromInboxId);
 
 				const messageString =
 					typeof message.content === "string"
 						? message.content
 						: JSON.stringify(message.content);
 
+				console.log("😊 Generating emoji reaction...");
 				const emoji = await generateText({
 					model: openai("gpt-4.1-nano"),
 					prompt: `Return only a single emoji that matches the sentiment of this message: ${messageString}. Do not include any other text or explanation.`,
 				});
+				console.log("   - Generated emoji:", emoji.text);
 
 				try {
 					// Add a reaction to the received message
+					console.log("⚡ Sending reaction...");
 					const reaction: Reaction = {
 						reference: message.id,
 						action: "added",
@@ -159,11 +192,14 @@ async function main() {
 						contentType: ContentTypeReaction,
 						isGroup,
 					});
+					console.log("✅ Reaction sent successfully");
 
 					const chatId = `xmptp-${addressFromInboxId}`;
+					console.log("🤖 Creating Bitte API client for chat ID:", chatId);
 					const bitteClient = new BitteAPIClient(chatId);
 
 					/* Get the AI response */
+					console.log("🧠 Sending message to AI agent...");
 					const completion = await bitteClient.sendToAgent({
 						systemMessage: `You are running in a DM chat. Keep responses super brief - like texting. Use emojis 👍. No markdown, just plain text. Think quick replies, not essays. If something needs multiple steps, just say what's next.
 
@@ -188,9 +224,13 @@ Example:
 							},
 						},
 					});
+					console.log("✅ AI response received");
+					console.log("   - Content:", completion.content);
+					console.log("   - Tool calls:", completion?.toolCalls?.length || 0);
 
 					// Process tool calls and group generate-evm-tx calls
 					if (completion?.toolCalls) {
+						console.log("🔧 Processing tool calls...");
 						// First, collect all generate-evm-tx calls
 						const evmTxCalls = completion.toolCalls
 							.filter((toolCall) => toolCall?.toolName === "generate-evm-tx")
@@ -198,17 +238,21 @@ Example:
 								extractEvmTxCall(toolCall, addressFromInboxId),
 							);
 
+						console.log("   - EVM transaction calls found:", evmTxCalls.length);
+
 						// Group by chainId, from, and version
 						const groupedTxs = new Map<string, WalletSendCallsParams>();
 
 						for (const txCall of evmTxCalls) {
 							const groupKey = `${txCall.chainId}-${txCall.from}-${txCall.version}`;
+							console.log("   - Processing transaction for group key:", groupKey);
 
 							if (groupedTxs.has(groupKey)) {
 								// Add to existing group
 								const existingGroup = groupedTxs.get(groupKey);
 								if (existingGroup) {
 									existingGroup.calls.push(...txCall.calls);
+									console.log("   - Added to existing group, total calls:", existingGroup.calls.length);
 								}
 							} else {
 								// Create new group
@@ -218,34 +262,42 @@ Example:
 									from: txCall.from,
 									calls: txCall.calls,
 								});
+								console.log("   - Created new group with calls:", txCall.calls.length);
 							}
 						}
 
 						// Send each grouped transaction
-						for (const [_groupKey, walletParams] of groupedTxs) {
+						console.log("💸 Sending grouped transactions...");
+						for (const [groupKey, walletParams] of groupedTxs) {
+							console.log("   - Sending transaction group:", groupKey);
 							await sendMessage(conversation, {
 								content: walletParams,
 								reference: message.id,
 								contentType: ContentTypeWalletSendCalls,
 								isGroup,
 							});
+							console.log("   - Transaction group sent successfully");
 						}
 					}
 
+					console.log("📤 Sending AI response message...");
 					await sendMessage(conversation, {
 						content: completion.content,
 						reference: message.id,
 						contentType: ContentTypeText,
 						isGroup,
 					});
+					console.log("✅ AI response message sent successfully");
 				} catch (error) {
-					console.error("Error getting AI response:", error);
+					console.error("❌ Error getting AI response:", error);
+					console.log("📤 Sending error message to user...");
 					await sendMessage(conversation, {
 						content: "Sorry, I encountered an error processing your message.",
 						reference: message.id,
 						contentType: ContentTypeText,
 						isGroup,
 					});
+					console.log("✅ Error message sent to user");
 				}
 			})();
 		});
@@ -253,6 +305,7 @@ Example:
 
 	// Start the message stream
 	messageStream();
+	console.log("✅ Agent is now running and listening for messages");
 }
 
 main().catch(console.error);
