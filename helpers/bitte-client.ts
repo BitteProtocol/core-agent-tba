@@ -22,9 +22,9 @@ export class BitteAPIClient {
 	private apiKey: string;
 	private chatId: string;
 
-	constructor(apiKey?: string) {
+	constructor(chatId: string, apiKey?: string) {
 		this.apiKey = apiKey || BITTE_API_KEY;
-		this.chatId = this.generateChatId();
+		this.chatId = chatId
 	}
 
 	/**

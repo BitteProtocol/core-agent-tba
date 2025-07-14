@@ -160,7 +160,8 @@ async function main() {
 						isGroup,
 					});
 
-					const bitteClient = new BitteAPIClient();
+					const chatId = `xmptp-${addressFromInboxId}`;
+					const bitteClient = new BitteAPIClient(chatId);
 
 					/* Get the AI response */
 					const completion = await bitteClient.sendToAgent({
