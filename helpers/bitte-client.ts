@@ -7,13 +7,6 @@ import {
 	MCP_SERVER_URL,
 } from "@/helpers/config";
 
-type WalletInfo = {
-	evm?: {
-		address?: string;
-		chainId?: number;
-	};
-};
-
 /**
  * Bitte API Client
  * Handles direct communication with Bitte API endpoints
@@ -24,7 +17,7 @@ export class BitteAPIClient {
 
 	constructor(chatId: string, apiKey?: string) {
 		this.apiKey = apiKey || BITTE_API_KEY;
-		this.chatId = chatId
+		this.chatId = chatId;
 	}
 
 	/**
@@ -52,12 +45,12 @@ export class BitteAPIClient {
 	 */
 	async sendToAgent({
 		message,
-		walletInfo,
+		evmAddress,
 		agentId = DEFAULT_AGENT_ID,
 		systemMessage,
 	}: {
 		message: string;
-		walletInfo?: WalletInfo;
+		evmAddress: string;
 		agentId?: string;
 		systemMessage?: string;
 	}): Promise<{
@@ -106,8 +99,7 @@ export class BitteAPIClient {
 				agentId: agentId,
 				mcpServerUrl: MCP_SERVER_URL,
 			},
-			evmAddress: walletInfo?.evm?.address || null,
-			chainId: walletInfo?.evm?.chainId || null,
+			evmAddress,
 		};
 
 		try {
@@ -261,7 +253,7 @@ export class BitteAPIClient {
 	async sendToAgentStreaming(
 		agentId: string,
 		message: string,
-		walletInfo: WalletInfo,
+		evmAddress: string,
 	) {
 		const messageId = this.generateMessageId();
 		const timestamp = new Date().toISOString();
@@ -287,7 +279,7 @@ export class BitteAPIClient {
 				agentId: agentId,
 				mcpServerUrl: MCP_SERVER_URL,
 			},
-			evmAddress: walletInfo?.evm?.address || null,
+			evmAddress,
 		};
 
 		try {
@@ -378,15 +370,12 @@ export class BitteAPIClient {
 	/**
 	 * Test API connection with a simple message
 	 */
-	async testConnection(
-		agentId?: string,
-		walletInfo?: WalletInfo,
-	): Promise<boolean> {
+	async testConnection(evmAddress: string, agentId?: string): Promise<boolean> {
 		try {
 			const response = await this.sendToAgent({
 				message: "Hello, are you available?",
 				agentId,
-				walletInfo,
+				evmAddress,
 			});
 
 			if (response?.content) {

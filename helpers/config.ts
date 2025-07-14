@@ -42,7 +42,9 @@ export const {
 	return {
 		// Bitte API endpoints
 		BITTE_API_BASE: "https://ai-runtime-446257178793.europe-west1.run.app",
-		CHAT_API_URL: process.env.BITTE_CHAT_API_URL || "https://ai-runtime-446257178793.europe-west1.run.app/chat",
+		CHAT_API_URL:
+			process.env.BITTE_CHAT_API_URL ||
+			"https://ai-runtime-446257178793.europe-west1.run.app/chat",
 		MCP_SERVER_URL:
 			"https://bitte-mcp-sse-446257178793.europe-west1.run.app/sse",
 

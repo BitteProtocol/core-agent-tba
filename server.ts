@@ -90,7 +90,12 @@ async function main() {
 				console.log("   - Conversation ID:", message.conversationId);
 				console.log("   - Sender Inbox ID:", message.senderInboxId);
 				console.log("   - Content Type:", message.contentType?.typeId);
-				console.log("   - Content:", typeof message.content === "string" ? message.content : JSON.stringify(message.content));
+				console.log(
+					"   - Content:",
+					typeof message.content === "string"
+						? message.content
+						: JSON.stringify(message.content),
+				);
 
 				const isTextMessage = message.contentType?.sameAs(ContentTypeText);
 				const isReplyMessage = message.contentType?.sameAs(ContentTypeReply);
@@ -216,13 +221,12 @@ async function main() {
 
 - Recommend simple actions/swaps like ETH -> USDC for users experimenting 
 Example:
-		'I help you manage your portfolio through natural language — like buy, sell, swap, or what's going on with the market.'`,
+		'I help you manage your portfolio through natural language — like buy, sell, swap, or what's going on with the market.'
+    
+- Assume the user is interacting on Base chainId (8453) unless explicitly requested to use a different chain.
+`,
 						message: messageString,
-						walletInfo: {
-							evm: {
-								address: addressFromInboxId,
-							},
-						},
+						evmAddress: addressFromInboxId,
 					});
 					console.log("✅ AI response received");
 					console.log("   - Content:", completion.content);
@@ -245,14 +249,20 @@ Example:
 
 						for (const txCall of evmTxCalls) {
 							const groupKey = `${txCall.chainId}-${txCall.from}-${txCall.version}`;
-							console.log("   - Processing transaction for group key:", groupKey);
+							console.log(
+								"   - Processing transaction for group key:",
+								groupKey,
+							);
 
 							if (groupedTxs.has(groupKey)) {
 								// Add to existing group
 								const existingGroup = groupedTxs.get(groupKey);
 								if (existingGroup) {
 									existingGroup.calls.push(...txCall.calls);
-									console.log("   - Added to existing group, total calls:", existingGroup.calls.length);
+									console.log(
+										"   - Added to existing group, total calls:",
+										existingGroup.calls.length,
+									);
 								}
 							} else {
 								// Create new group
@@ -262,7 +272,10 @@ Example:
 									from: txCall.from,
 									calls: txCall.calls,
 								});
-								console.log("   - Created new group with calls:", txCall.calls.length);
+								console.log(
+									"   - Created new group with calls:",
+									txCall.calls.length,
+								);
 							}
 						}
 
