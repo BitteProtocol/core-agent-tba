@@ -160,8 +160,6 @@ async function main() {
 					const completion = await bitteClient.sendToAgent({
 						systemMessage: `You are running in a DM chat. Keep responses super brief - like texting. Use emojis 👍. No markdown, just plain text. Think quick replies, not essays. If something needs multiple steps, just say what's next.
 
-- **IMPORTANT** ALWAYS USE 'generate-evm-tx' tool to render transactions, especially after the 'swap' tool.
-
 **Make sure to have portfolio context for each user**
 
 - Any user without ETH/Native token on their wallet should explicitly be reminded they don't have any and need it to use any onchain actions.
@@ -182,79 +180,83 @@ Example:
 						message: messageString,
 						evmAddress: addressFromInboxId,
 					});
+					console.log(
+						"COMPLETION TOOL CALLS",
+						JSON.stringify(completion.toolCalls, null, 2),
+					);
 
 					// Process tool calls and group generate-evm-tx calls
 					if (completion?.toolCalls) {
-						// First, collect all generate-evm-tx calls
-						const evmTxCalls = completion.toolCalls
-							.filter((toolCall) => toolCall?.toolName === "generate-evm-tx")
-							.map((toolCall) =>
-								extractEvmTxCall(toolCall, addressFromInboxId),
-							);
+						const evmTxCalls = [];
 
-						// If no generate-evm-tx calls found, look for swap calls
-						if (evmTxCalls.length === 0) {
-							// Find swap tool calls and their results
-							const swapCalls = completion.toolCalls.filter(
-								(toolCall) => toolCall?.toolName === "swap",
-							);
+						// Check if there are any swap calls
+						const swapCalls = completion.toolCalls.filter(
+							(toolCall) => toolCall?.toolName === "swap",
+						);
 
-							if (swapCalls.length > 0) {
-								// Process each swap call
-								for (const swapCall of swapCalls) {
-									// Find the corresponding result
-									const swapResult = completion.toolCalls.find(
-										(tc) =>
-											tc.toolCallId === swapCall.toolCallId &&
-											"result" in tc &&
-											tc.result?.data?.transaction,
-									);
+						if (swapCalls.length > 0) {
+							// Process only swap calls if they exist
+							for (const swapCall of swapCalls) {
+								// Find the corresponding result
+								const swapResult = completion.toolCalls.find(
+									(tc) =>
+										tc.toolCallId === swapCall.toolCallId &&
+										"result" in tc &&
+										tc.result?.data?.transaction,
+								);
 
-									if (swapResult && "result" in swapResult) {
-										const result = swapResult.result;
-										const txData = result.data?.transaction;
-										if (txData?.params) {
-											// Extract transaction parameters - handle array of transactions
-											const chainId = toHex(txData.chainId || 8453);
+								if (swapResult && "result" in swapResult) {
+									const result = swapResult.result;
+									const txData = result.data?.transaction;
+									if (txData?.params) {
+										const chainId = toHex(txData.chainId || 8453);
 
-											// Generate swap description from token parameters
-											const sellToken = swapCall.args?.sellToken || "Token A";
-											const buyToken = swapCall.args?.buyToken || "Token B";
-											const swapDescription = `Swap ${sellToken} for ${buyToken}`;
+										// Generate swap description from token parameters
+										const sellToken = swapCall.args?.sellToken || "Token A";
+										const buyToken = swapCall.args?.buyToken || "Token B";
+										const swapDescription = `Swap ${sellToken} for ${buyToken}`;
 
-											// Extract CowSwap order URL from the correct location
-											const cowswapOrderUrl = result.data?.meta?.orderUrl;
+										// Extract CowSwap order URL from the correct location
+										const cowswapOrderUrl = result.data?.meta?.orderUrl;
 
-											// Create calls array from all params
-											const calls = txData.params.map(
-												(param: {
-													to: string;
-													data: string;
-													value: string;
-													from: string;
-												}) => ({
-													to: param.to,
-													data: param.data,
-													value: param.value || "0x0",
-													metadata: {
-														description: swapDescription,
-														transactionType: "swap",
-														...(cowswapOrderUrl && { cowswapOrderUrl }),
-													},
-												}),
-											);
+										console.log("COWSWAP ORDER URL", cowswapOrderUrl);
 
-											const txCall = {
-												version: "1.0.0" as const,
-												chainId: chainId,
-												from: txData.params[0]?.from || addressFromInboxId,
-												calls: calls,
-											};
-											evmTxCalls.push(txCall);
-										}
+										// Create calls array from all params
+										const calls = txData.params.map(
+											(param: {
+												to: string;
+												data: string;
+												value: string;
+												from: string;
+											}) => ({
+												to: param.to,
+												data: param.data,
+												value: param.value || "0x0",
+												metadata: {
+													description: swapDescription,
+													transactionType: "swap",
+													...(cowswapOrderUrl && { cowswapOrderUrl }),
+												},
+											}),
+										);
+
+										evmTxCalls.push({
+											version: "1.0.0" as const,
+											chainId: chainId,
+											from: txData.params[0]?.from || addressFromInboxId,
+											calls: calls,
+										});
 									}
 								}
 							}
+						} else {
+							// If no swap calls, process generate-evm-tx calls
+							const directEvmTxCalls = completion.toolCalls
+								.filter((toolCall) => toolCall?.toolName === "generate-evm-tx")
+								.map((toolCall) =>
+									extractEvmTxCall(toolCall, addressFromInboxId),
+								);
+							evmTxCalls.push(...directEvmTxCalls);
 						}
 
 						// Group by chainId, from, and version
