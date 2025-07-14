@@ -223,7 +223,13 @@ export const createClientWithRevoke = async (
 			console.log("Revoked all other installations ␡");
 		}
 		console.log("Creating new client with config", config);
-		return await Client.create(signer, config);
+		const client = await Client.create(signer, config);
+		console.log("New client created ✅");
+
+		await client.init(identifier);
+		console.log("Client initialized ✅");
+
+		return client;
 	} catch (error) {
 		console.error("Error revoking installations ❌", error);
 		throw error;
