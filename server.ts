@@ -14,6 +14,7 @@ import {
 } from "@xmtp/content-type-wallet-send-calls";
 import { LogLevel, type XmtpEnv } from "@xmtp/node-sdk";
 import { generateText } from "ai";
+import { toHex } from "viem/utils";
 import { BitteAPIClient } from "@/helpers/bitte-client";
 import {
 	createClientWithRevoke,
@@ -102,7 +103,10 @@ async function main() {
 
 				// ignore non-text and non-reply messages
 				if (!isTextMessage && !isReplyMessage) {
-					console.log("⏭️ Ignoring non-text and non-reply message");
+					console.log(
+						"Non-text and non-reply message",
+						JSON.stringify(message, null, 2),
+					);
 					return;
 				}
 
@@ -110,7 +114,10 @@ async function main() {
 				if (
 					message.senderInboxId.toLowerCase() === client.inboxId.toLowerCase()
 				) {
-					console.log("⏭️ Ignoring message from agent itself");
+					console.log(
+						"message from agent itself",
+						JSON.stringify(message, null, 2),
+					);
 					return;
 				}
 
@@ -208,6 +215,8 @@ async function main() {
 					const completion = await bitteClient.sendToAgent({
 						systemMessage: `You are running in a DM chat. Keep responses super brief - like texting. Use emojis 👍. No markdown, just plain text. Think quick replies, not essays. If something needs multiple steps, just say what's next.
 
+- **IMPORTANT** ALWAYS USE 'generate-evm-tx' tool to render transactions, especially after the 'swap' tool.
+
 **Make sure to have portfolio context for each user**
 
 - Any user without ETH/Native token on their wallet should explicitly be reminded they don't have any and need it to use any onchain actions.
@@ -229,6 +238,7 @@ Example:
 						evmAddress: addressFromInboxId,
 					});
 
+					console.log("ENTIRE COMPLETION", JSON.stringify(completion, null, 2));
 					// Process tool calls and group generate-evm-tx calls
 					if (completion?.toolCalls) {
 						// First, collect all generate-evm-tx calls
@@ -237,6 +247,79 @@ Example:
 							.map((toolCall) =>
 								extractEvmTxCall(toolCall, addressFromInboxId),
 							);
+
+						// If no generate-evm-tx calls found, look for swap calls
+						if (evmTxCalls.length === 0) {
+							console.log(
+								"🔄 No generate-evm-tx calls found, checking for swap calls...",
+							);
+
+							// Find swap tool calls and their results
+							const swapCalls = completion.toolCalls.filter(
+								(toolCall) => toolCall?.toolName === "swap",
+							);
+
+							if (swapCalls.length > 0) {
+								console.log(`   - Found ${swapCalls.length} swap calls`);
+
+								// Process each swap call
+								for (const swapCall of swapCalls) {
+									// Find the corresponding result
+									const swapResult = completion.toolCalls.find(
+										(tc) =>
+											tc.toolCallId === swapCall.toolCallId &&
+											"result" in tc &&
+											tc.result?.data?.transaction,
+									);
+
+									if (swapResult && "result" in swapResult) {
+										const result = swapResult.result;
+										const txData = result.data?.transaction;
+										if (txData) {
+											console.log(
+												"   - Processing swap transaction:",
+												txData.method,
+											);
+
+											// Extract transaction parameters
+											const params = txData.params?.[0];
+											if (params) {
+												const chainId = toHex(txData.chainId || 8453);
+
+												// Generate swap description from token parameters
+												const sellToken = swapCall.args?.sellToken || "Token A";
+												const buyToken = swapCall.args?.buyToken || "Token B";
+												const swapDescription = `Swap ${sellToken} for ${buyToken}`;
+
+												// Extract CowSwap order URL if available
+												const cowswapOrderUrl =
+													result.data?.orderUrl || result.data?.cowswapOrderUrl;
+
+												const txCall = {
+													version: "1.0.0" as const,
+													chainId: chainId,
+													from: params.from || addressFromInboxId,
+													calls: [
+														{
+															to: params.to,
+															data: params.data,
+															value: params.value || "0x0",
+															metadata: {
+																description: swapDescription,
+																transactionType: "swap",
+																...(cowswapOrderUrl && { cowswapOrderUrl }),
+															},
+														},
+													],
+												};
+												evmTxCalls.push(txCall);
+												console.log("   - Converted swap to transaction call");
+											}
+										}
+									}
+								}
+							}
+						}
 
 						// Group by chainId, from, and version
 						const groupedTxs = new Map<string, WalletSendCallsParams>();
@@ -274,16 +357,13 @@ Example:
 						}
 
 						// Send each grouped transaction
-						console.log("💸 Sending grouped transactions...");
-						for (const [groupKey, walletParams] of groupedTxs) {
-							console.log("   - Sending transaction group:", groupKey);
+						for (const [_groupKey, walletParams] of groupedTxs) {
 							await sendMessage(conversation, {
 								content: walletParams,
 								reference: message.id,
 								contentType: ContentTypeWalletSendCalls,
 								isGroup,
 							});
-							console.log("   - Transaction group sent successfully");
 						}
 					}
 
