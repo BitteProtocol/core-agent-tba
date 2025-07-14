@@ -51,7 +51,7 @@ async function main() {
 		dbEncryptionKey,
 		env: XMTP_ENV as XmtpEnv,
 		// don't create local db files during development
-		dbPath: IS_PRODUCTION ? undefined : null,
+		dbPath: IS_PRODUCTION ? null : null,
 		codecs: [
 			new ReactionCodec(),
 			new WalletSendCallsCodec(),
