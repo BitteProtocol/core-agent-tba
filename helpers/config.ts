@@ -2,6 +2,8 @@ import dotenv from "dotenv";
 
 dotenv.config();
 
+export const BASE_CHAIN_ID = 8453;
+
 // Configuration
 export const {
 	WALLET_KEY,
@@ -57,7 +59,7 @@ export const {
 				mainnet: { chainId: 1, rpcUrl: "https://eth.llamarpc.com" },
 				polygon: { chainId: 137, rpcUrl: "https://polygon.llamarpc.com" },
 				arbitrum: { chainId: 42161, rpcUrl: "https://arbitrum.llamarpc.com" },
-				base: { chainId: 8453, rpcUrl: "https://base.llamarpc.com" },
+				base: { chainId: BASE_CHAIN_ID, rpcUrl: "https://base.llamarpc.com" },
 			},
 			NEAR: {
 				mainnet: {

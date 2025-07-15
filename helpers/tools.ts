@@ -1,5 +1,6 @@
 import type { ToolInvocation } from "ai";
 import { parseEther, toHex } from "viem/utils";
+import { BASE_CHAIN_ID } from "./config";
 
 export const extractEvmTxCall = (
 	toolCall: ToolInvocation,
@@ -7,7 +8,7 @@ export const extractEvmTxCall = (
 ) => {
 	const params = toolCall?.args?.params || [];
 	const chainId = toolCall?.args?.chainId;
-	const chainIdHex = toHex(Number.parseInt(chainId || "8453"));
+	const chainIdHex = toHex(chainId ? Number.parseInt(chainId) : BASE_CHAIN_ID);
 	const method = toolCall?.args?.method;
 
 	// Extract all calls from the params array
