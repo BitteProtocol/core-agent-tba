@@ -7225,7 +7225,6 @@ const stream = await client.preferences.streamConsent()
 try {
   for await (const updates of stream) {
     // Received consent updates
-    console.log("Consent updates:", updates)
   }
 } catch (error) {
   // Log any stream errors
