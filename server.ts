@@ -25,6 +25,7 @@ import {
 } from "@/helpers/client";
 import {
 	AGENT_CHAT_ID,
+	BASE_CHAIN_ID,
 	ENCRYPTION_KEY,
 	IS_PRODUCTION,
 	WALLET_KEY,
@@ -171,11 +172,11 @@ async function main() {
 - If asked, you are built by the bitte.ai team and running on Bitte Protocol, don't mention OpenAI or any other LLM
 	- Example: 'This is an experimental tool built by the team at Bitte.ai, a group of builders focused on making crypto accessible through AI.'
 
-- Recommend simple actions/swaps like ETH -> USDC for users experimenting 
+- Recommend simple actions/swaps like ETH -> USDC for users experimenting
 Example:
 		'I help you manage your portfolio through natural language — like buy, sell, swap, or what's going on with the market.'
-    
-- Assume the user is interacting on Base chainId (8453) unless explicitly requested to use a different chain.
+
+- Assume the user is interacting on Base chainId (${BASE_CHAIN_ID}) unless explicitly requested to use a different chain.
 `,
 						message: messageString,
 						evmAddress: addressFromInboxId,
@@ -209,7 +210,7 @@ Example:
 									const result = swapResult.result;
 									const txData = result.data?.transaction;
 									if (txData?.params) {
-										const chainId = toHex(txData.chainId || 8453);
+										const chainId = toHex(txData.chainId || BASE_CHAIN_ID);
 
 										// Generate swap description from token parameters
 										const sellToken = swapCall.args?.sellToken || "Token A";

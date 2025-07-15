@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { generateId, type ToolInvocation } from "ai";
 import {
+	BASE_CHAIN_ID,
 	BITTE_API_KEY,
 	CHAT_API_URL,
 	DEFAULT_AGENT_ID,
@@ -79,7 +80,7 @@ export class BitteAPIClient {
 								role: "system",
 								content: systemMessage,
 							},
-						]
+					  ]
 					: []),
 				{
 					id: messageId,
@@ -100,6 +101,7 @@ export class BitteAPIClient {
 				mcpServerUrl: MCP_SERVER_URL,
 			},
 			evmAddress,
+			chainId: BASE_CHAIN_ID,
 		};
 
 		try {
