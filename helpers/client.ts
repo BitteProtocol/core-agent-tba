@@ -1,34 +1,53 @@
 import { getRandomValues } from "node:crypto";
 import fs from "node:fs";
-import path from "node:path";
-import {
-	ContentTypeReaction,
-	type Reaction,
-	type ReactionCodec,
-} from "@xmtp/content-type-reaction";
+import { ContentTypeReaction } from "@xmtp/content-type-reaction";
 import { ContentTypeReply, type Reply } from "@xmtp/content-type-reply";
-import type { ContentTypeText } from "@xmtp/content-type-text";
-import type {
-	ContentTypeTransactionReference,
-	TransactionReference,
-} from "@xmtp/content-type-transaction-reference";
-import {
-	ContentTypeWalletSendCalls,
-	type WalletSendCallsParams,
-} from "@xmtp/content-type-wallet-send-calls";
-import {
-	Client,
-	type ClientOptions,
-	type Conversation,
-	type ExtractCodecContentTypes,
-	getInboxIdForIdentifier,
-	IdentifierKind,
-	type Signer,
-} from "@xmtp/node-sdk";
-import { fromString, toString as uint8ArrayToString } from "uint8arrays";
+import { ContentTypeWalletSendCalls } from "@xmtp/content-type-wallet-send-calls";
+import type { Conversation, DecodedMessage } from "@xmtp/node-sdk";
+import { type Client, IdentifierKind, type Signer } from "@xmtp/node-sdk";
+import { fromString, toString as uint8arraysToString } from "uint8arrays";
 import { createWalletClient, http, toBytes } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { sepolia } from "viem/chains";
+import type { ClientContentTypes } from "@/server";
+
+export const sendMessage = async (
+	conversation: Conversation<ClientContentTypes>,
+	{
+		content,
+		contentType,
+		reference,
+		referenceInboxId,
+		isGroup = false,
+	}: {
+		content: Reply | ClientContentTypes;
+		contentType: typeof ContentTypeReaction | typeof ContentTypeReply;
+		reference?: string;
+		referenceInboxId?: string;
+		isGroup?: boolean;
+	},
+) => {
+	// normal message or reaction for non group messages and
+	if (!reference || !isGroup || ContentTypeReaction.sameAs(contentType)) {
+		await conversation.send(content, contentType);
+	} else {
+		// maintain wallet content type for wallet send calls
+		const hasWalletSendCalls = ContentTypeWalletSendCalls.sameAs(contentType);
+
+		const messageContent = {
+			content,
+			contentType,
+			reference,
+			referenceInboxId,
+		};
+
+		const messageContentType = hasWalletSendCalls
+			? contentType
+			: ContentTypeReply;
+
+		await conversation.send(messageContent, messageContentType);
+	}
+};
 
 interface User {
 	key: `0x${string}`;
@@ -76,7 +95,7 @@ export const generateEncryptionKeyHex = () => {
 	/* Generate a random encryption key */
 	const uint8Array = getRandomValues(new Uint8Array(32));
 	/* Convert the encryption key to a hex string */
-	return uint8ArrayToString(uint8Array, "hex");
+	return uint8arraysToString(uint8Array, "hex");
 };
 
 /**
@@ -89,22 +108,43 @@ export const getEncryptionKeyFromHex = (hex: string) => {
 	return fromString(hex, "hex");
 };
 
-export const getDbPath = (description: string = "xmtp") => {
+export const getDbPath = (env: string, suffix: string = "xmtp") => {
 	//Checks if the environment is a Railway deployment
-	const volumePath = process.env.RAILWAY_VOLUME_MOUNT_PATH ?? ".data/xmtp";
-	// Create database directory if it doesn't exist
-	if (!fs.existsSync(volumePath)) {
-		fs.mkdirSync(volumePath, { recursive: true });
+	const volumePath = process.env.RAILWAY_VOLUME_MOUNT_PATH || ".data/xmtp";
+
+	// Ensure volumePath is not empty
+	if (!volumePath || volumePath.trim() === "") {
+		throw new Error(
+			"Volume path is empty. Please set RAILWAY_VOLUME_MOUNT_PATH or check your Railway volume configuration.",
+		);
 	}
-	return `${volumePath}/${description}.db3`;
+
+	// Create database directory if it doesn't exist
+	try {
+		if (!fs.existsSync(volumePath)) {
+			fs.mkdirSync(volumePath, { recursive: true });
+		}
+	} catch (error) {
+		console.error(`Failed to create directory ${volumePath}:`, error);
+		// Fallback to a temporary directory
+		const fallbackPath = "/tmp/xmtp";
+		if (!fs.existsSync(fallbackPath)) {
+			fs.mkdirSync(fallbackPath, { recursive: true });
+		}
+		const dbPath = `${fallbackPath}/${env}-${suffix}.db3`;
+		return dbPath;
+	}
+
+	const dbPath = `${volumePath}/${env}-${suffix}.db3`;
+	return dbPath;
 };
 
 export const logAgentDetails = async (
-	clients: Client<ExtractCodecContentTypes<[ReactionCodec]>>,
+	clients: Client<ClientContentTypes> | Client<ClientContentTypes>[],
 ): Promise<void> => {
 	const clientArray = Array.isArray(clients) ? clients : [clients];
 	const clientsByAddress = clientArray.reduce<
-		Record<string, Client<string | Reaction>[]>
+		Record<string, Client<ClientContentTypes>[]>
 	>((acc, client) => {
 		const address = client.accountIdentifier?.identifier as string;
 		acc[address] = acc[address] ?? [];
@@ -115,166 +155,96 @@ export const logAgentDetails = async (
 	for (const [address, clientGroup] of Object.entries(clientsByAddress)) {
 		const firstClient = clientGroup[0];
 		const inboxId = firstClient.inboxId;
-		const installationId = firstClient.installationId;
 		const environments = clientGroup
-			.map((c: Client<string | Reaction>) => c.options?.env ?? "production")
+			.map((c: Client<ClientContentTypes>) => c.options?.env ?? "dev")
 			.join(", ");
-		console.log(`\x1b[38;2;252;76;52m
-        ██╗  ██╗███╗   ███╗████████╗██████╗ 
-        ╚██╗██╔╝████╗ ████║╚══██╔══╝██╔══██╗
-         ╚███╔╝ ██╔████╔██║   ██║   ██████╔╝
-         ██╔██╗ ██║╚██╔╝██║   ██║   ██╔═══╝ 
-        ██╔╝ ██╗██║ ╚═╝ ██║   ██║   ██║     
-        ╚═╝  ╚═╝╚═╝     ╚═╝   ╚═╝   ╚═╝     
-      \x1b[0m`);
 
 		const urls = [`http://xmtp.chat/dm/${address}`];
 
 		const conversations = await firstClient.conversations.list();
-		const inboxState = await firstClient.preferences.inboxState();
+		const installations = await firstClient.preferences.inboxState();
 
 		console.log(`
     ✓ XMTP Client:
-    • InboxId: ${inboxId}
     • Address: ${address}
+    • Installations: ${installations.installations.length}
     • Conversations: ${conversations.length}
-    • Installations: ${inboxState.installations.length}
-    • InstallationId: ${installationId}
+    • InboxId: ${inboxId}
     • Networks: ${environments}
     ${urls.map((url) => `• URL: ${url}`).join("\n")}`);
 	}
 };
-export function validateEnvironment(vars: string[]): Record<string, string> {
-	const missing = vars.filter((v) => !process.env[v]);
 
-	if (missing.length) {
-		try {
-			const envPath = path.resolve(process.cwd(), ".env");
-			if (fs.existsSync(envPath)) {
-				const envVars = fs
-					.readFileSync(envPath, "utf-8")
-					.split("\n")
-					.filter((line) => line.trim() && !line.startsWith("#"))
-					.reduce<Record<string, string>>((acc, line) => {
-						const [key, ...val] = line.split("=");
-						if (key && val.length) acc[key.trim()] = val.join("=").trim();
-						return acc;
-					}, {});
+/**
+ * Extract message content from different message types
+ *
+ * Handles various XMTP message types including replies and regular text messages.
+ * For reply messages, it attempts to extract the actual user content from
+ * various possible locations in the message structure.
+ *
+ * @param message - The decoded XMTP message
+ * @returns The message content as a string
+ */
+export function extractMessageContent(message: DecodedMessage): string {
+	// Handle reply messages
+	if (message.contentType?.typeId === "reply") {
+		const messageAny = message;
+		const replyContent = message.content;
 
-				missing.forEach((v) => {
-					if (envVars[v]) process.env[v] = envVars[v];
-				});
+		if (replyContent && typeof replyContent === "object") {
+			// Try different possible property names for the actual content
+			if ("content" in replyContent) {
+				return String(replyContent.content);
 			}
-		} catch (e) {
-			console.error(e);
-			/* ignore errors */
+			if ("text" in replyContent) {
+				return String(replyContent.text);
+			}
+			if ("message" in replyContent) {
+				return String(replyContent.message);
+			}
 		}
 
-		const stillMissing = vars.filter((v) => !process.env[v]);
-		if (stillMissing.length) {
-			console.error("Missing env vars:", stillMissing.join(", "));
-			process.exit(1);
+		// Check fallback field (might contain the actual user message)
+		if (messageAny.fallback && typeof messageAny.fallback === "string") {
+			// Extract the actual user message from the fallback format
+			// Format: 'Replied with "actual message" to an earlier message'
+			const fallbackText = messageAny.fallback;
+			const match = fallbackText.match(
+				/Replied with "(.+)" to an earlier message/,
+			);
+			if (match?.[1]) {
+				const actualMessage = match[1];
+				return actualMessage;
+			}
+
+			// If pattern doesn't match, return the full fallback text
+			return fallbackText;
 		}
+
+		// Check parameters field (might contain reply data)
+		if (messageAny.parameters && typeof messageAny.parameters === "object") {
+			const params = messageAny.parameters;
+			if (params.content) {
+				return String(params.content);
+			}
+			if (params.text) {
+				return String(params.text);
+			}
+		}
+
+		// If content is null/undefined, return empty string to avoid errors
+		if (replyContent === null || replyContent === undefined) {
+			return "";
+		}
+
+		// Fallback to stringifying the whole content if structure is different
+		return JSON.stringify(replyContent);
 	}
 
-	return vars.reduce<Record<string, string>>((acc, key) => {
-		acc[key] = process.env[key] as string;
-		return acc;
-	}, {});
+	// Handle regular text messages
+	const content = message.content;
+	if (content === null || content === undefined) {
+		return "";
+	}
+	return String(content);
 }
-
-export const createClientWithRevoke = async (
-	signer: Signer,
-	config: ClientOptions,
-): Promise<Client<ExtractCodecContentTypes<typeof config.codecs>>> => {
-	// try to create new client, if it fails, revoke all other installations and try again
-	const identifier = await signer.getIdentifier();
-	try {
-		const client = await Client.create(signer, config);
-		console.log("New client created ✅");
-
-		// revoke all other installations
-		await client.revokeAllOtherInstallations();
-		console.log("Revoked all other installations ␡");
-
-		return client;
-	} catch (error) {
-		console.error("Error creating client ❌", error);
-	}
-
-	try {
-		// revoke all other installations
-		const inboxId = await getInboxIdForIdentifier(identifier, config.env);
-		if (inboxId) {
-			const inboxStates = await Client.inboxStateFromInboxIds(
-				[inboxId],
-				config.env,
-			);
-			const toRevokeInstallationBytes = inboxStates[0].installations.map(
-				(i) => i.bytes,
-			);
-			console.log("To revoke installation bytes", toRevokeInstallationBytes);
-			await Client.revokeInstallations(
-				signer,
-				inboxId,
-				toRevokeInstallationBytes,
-				config.env,
-			);
-			console.log("Revoked all other installations ␡");
-		}
-		console.log("Creating new client with config", config);
-		const client = await Client.create(signer, config);
-		console.log("New client created ✅");
-
-		await client.init(identifier);
-		console.log("Client initialized ✅");
-
-		return client;
-	} catch (error) {
-		console.error("Error revoking installations ❌", error);
-		throw error;
-	}
-};
-
-export const sendMessage = async (
-	conversation: Conversation,
-	{
-		content,
-		reference,
-		contentType,
-		isGroup = false,
-	}: {
-		content:
-			| Reaction
-			| Reply
-			| WalletSendCallsParams
-			| TransactionReference
-			| string;
-		reference: string;
-		contentType:
-			| typeof ContentTypeReaction
-			| typeof ContentTypeReply
-			| typeof ContentTypeText
-			| typeof ContentTypeWalletSendCalls
-			| typeof ContentTypeTransactionReference;
-		isGroup?: boolean;
-	},
-) => {
-	if (!isGroup || contentType.typeId === ContentTypeReaction.typeId) {
-		await conversation.send(content, contentType);
-	} else {
-		const hasWalletSendCalls =
-			contentType.typeId === ContentTypeWalletSendCalls.typeId;
-		const reply: Reply = {
-			reference,
-			content,
-			contentType,
-		};
-
-		const replyContentType = hasWalletSendCalls
-			? contentType
-			: ContentTypeReply;
-
-		await conversation.send(reply, replyContentType);
-	}
-};

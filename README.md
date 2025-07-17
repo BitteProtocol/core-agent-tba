@@ -1,7 +1,7 @@
 # XMTP Bitte Agent Message Listener
 
 A Bun-based Node.js service that continuously listens for XMTP messages and processes them through the Bitte AI API.
-
+a
 ## Features
 
 - **Real-time XMTP Integration**: Continuously listens for new XMTP messages
