@@ -8,7 +8,11 @@ import {
 	type Reaction,
 	ReactionCodec,
 } from "@xmtp/content-type-reaction";
-import { type Reply, ReplyCodec } from "@xmtp/content-type-reply";
+import {
+	ContentTypeReply,
+	type Reply,
+	ReplyCodec,
+} from "@xmtp/content-type-reply";
 import { ContentTypeText, TextCodec } from "@xmtp/content-type-text";
 import {
 	ContentTypeTransactionReference,
@@ -29,7 +33,6 @@ import {
 } from "@xmtp/node-sdk";
 import { generateText } from "ai";
 import type { Address, Hex, Signature, TypedDataDomain } from "viem";
-import { toHex } from "viem/utils";
 import { sendToAgent } from "@/helpers/bitte-client";
 import {
 	createSigner,
@@ -37,7 +40,6 @@ import {
 	getDbPath,
 	getEncryptionKeyFromHex,
 	logAgentDetails,
-	sendMessage,
 } from "@/helpers/client";
 import {
 	AGENT_CHAT_ID,
@@ -141,22 +143,22 @@ interface SwapArgs {
 	buyToken: string;
 }
 
-interface SwapResult {
-	data: {
-		transaction: {
-			chainId: number;
-			params: Array<{
-				to: string;
-				data: string;
-				value: string;
-				from: string;
-			}>;
-		};
-		meta?: {
-			orderUrl?: string;
-		};
-	};
-}
+// interface SwapResult {
+// 	data: {
+// 		transaction: {
+// 			chainId: number;
+// 			params: Array<{
+// 				to: string;
+// 				data: string;
+// 				value: string;
+// 				from: string;
+// 			}>;
+// 		};
+// 		meta?: {
+// 			orderUrl?: string;
+// 		};
+// 	};
+// }
 
 interface CompletionResponse {
 	toolCalls?: ToolCall[];
@@ -169,7 +171,6 @@ interface CompletionResponse {
 	};
 	isContinued?: boolean;
 }
-
 
 // [All your existing constants and helper functions remain the same]
 export const generateReaction = async ({
@@ -329,24 +330,22 @@ const handleStream = async () => {
 					// Check if this is the agent's first message in the conversation
 					const messages = await conversation.messages();
 					const hasAgentReplied = messages.some(
-						(msg) => msg.senderInboxId === clientInboxId
+						(msg) => msg.senderInboxId === clientInboxId,
 					);
 
 					// Send welcome message if it's the agent's first interaction
 					if (!hasAgentReplied) {
-						await sendMessage(conversation, {
-							content: WELCOME_MESSAGE,
-							contentType: ContentTypeText,
-							isGroup,
-						});
+						await conversation.send(WELCOME_MESSAGE, ContentTypeText);
 					}
 
 					// Helper functions for group chat filtering
 					const isReplyToAgent = (message: DecodedMessage) => {
-						if (!message.contentType.sameAs(ContentTypeReply)) return false;
+						if (!message.contentType?.sameAs(ContentTypeReply)) return false;
 						const replyContent = message.content as Reply;
 						return messages.some(
-							(msg) => msg.id === replyContent.reference && msg.senderInboxId === clientInboxId
+							(msg) =>
+								msg.id === replyContent.reference &&
+								msg.senderInboxId === clientInboxId,
 						);
 					};
 
@@ -377,13 +376,7 @@ const handleStream = async () => {
 						referenceInboxId: senderInboxId,
 					});
 
-					await sendMessage(conversation, {
-						content: reaction,
-						reference: message.id,
-						contentType: ContentTypeReaction,
-						referenceInboxId: senderInboxId,
-						isGroup,
-					});
+					await conversation.send(reaction, ContentTypeReaction);
 
 					// Get sender's EVM address
 					const inboxState = await client.preferences.inboxStateFromInboxIds([
@@ -425,16 +418,19 @@ Use as many tool calls as possible to fulfill the user's requests.
 						evmAddress: addressFromInboxId,
 					});
 
-					console.log("COMPLETION", JSON.stringify(completion.content, null, 2));
+					console.log(
+						"COMPLETION",
+						JSON.stringify(completion.content, null, 2),
+					);
 
 					// Handle tool calls and transaction references
 					if (completion.toolCalls && completion.toolCalls.length > 0) {
 						for (const toolCall of completion.toolCalls) {
-							if ('result' in toolCall && toolCall.result?.data) {
+							if ("result" in toolCall && toolCall.result?.data) {
 								const data = toolCall.result.data;
-								
+
 								// Handle EVM sign requests
-								if ('evmSignRequest' in data && data.evmSignRequest) {
+								if ("evmSignRequest" in data && data.evmSignRequest) {
 									const signRequest = data.evmSignRequest;
 									const walletSendCalls: WalletSendCallsParams = {
 										version: "1.0",
@@ -447,17 +443,14 @@ Use as many tool calls as possible to fulfill the user's requests.
 										})),
 									};
 
-									await sendMessage(conversation, {
-										content: walletSendCalls,
-										contentType: ContentTypeWalletSendCalls,
-										reference: message.id,
-										referenceInboxId: senderInboxId,
-										isGroup,
-									});
+									await conversation.send(
+										walletSendCalls,
+										ContentTypeWalletSendCalls,
+									);
 								}
 
 								// Handle swap transactions
-								if ('swapArgs' in data && data.swapArgs) {
+								if ("swapArgs" in data && data.swapArgs) {
 									// Process swap transaction if needed
 									console.log("Swap args:", data.swapArgs);
 								}
@@ -473,13 +466,7 @@ Use as many tool calls as possible to fulfill the user's requests.
 							content: completion.content,
 						};
 
-						await sendMessage(conversation, {
-							content: reply,
-							contentType: ContentTypeReply,
-							reference: message.id,
-							referenceInboxId: senderInboxId,
-							isGroup,
-						});
+						await conversation.send(reply, ContentTypeReply);
 					}
 				}
 			} catch (error) {
@@ -494,5 +481,3 @@ Use as many tool calls as possible to fulfill the user's requests.
 
 // Start the stream handling
 handleStream();
-
-      

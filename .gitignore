@@ -13,3 +13,6 @@ out/
 /.vscode/
 
 /dist
+
+# db
+./data

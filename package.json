@@ -7,7 +7,6 @@
 	"scripts": {
 		"dev": "bun server.ts",
 		"start": "bun server.ts",
-		"test-connection": "bun scripts/test-connection.ts",
 		"gen-keys": "bun scripts/gen-keys",
 		"check-installations": "bun scripts/check-installations",
 		"clean-installations": "bun scripts/clean-installations",

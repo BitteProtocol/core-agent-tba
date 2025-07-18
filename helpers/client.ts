@@ -1,58 +1,12 @@
 import { getRandomValues } from "node:crypto";
 import fs from "node:fs";
-import { ContentTypeReaction } from "@xmtp/content-type-reaction";
-import { ContentTypeReply, type Reply } from "@xmtp/content-type-reply";
-import { ContentTypeText } from "@xmtp/content-type-text";
-import { ContentTypeWalletSendCalls } from "@xmtp/content-type-wallet-send-calls";
-import type { Conversation, DecodedMessage } from "@xmtp/node-sdk";
+import type { DecodedMessage } from "@xmtp/node-sdk";
 import { type Client, IdentifierKind, type Signer } from "@xmtp/node-sdk";
 import { fromString, toString as uint8arraysToString } from "uint8arrays";
 import { createWalletClient, http, toBytes } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { sepolia } from "viem/chains";
 import type { ClientContentTypes } from "@/server";
-
-export const sendMessage = async (
-	conversation: Conversation<ClientContentTypes>,
-	{
-		content,
-		contentType,
-		reference,
-		referenceInboxId,
-		isGroup = false,
-	}: {
-		content: any; // Allow any content type
-		contentType: any; // Allow any content type
-		reference?: string;
-		referenceInboxId?: string;
-		isGroup?: boolean;
-	},
-) => {
-	// Send plain text messages directly
-	if (!contentType || contentType.typeId === "text") {
-		await conversation.send(content);
-		return;
-	}
-
-	// Send reactions, wallet send calls, and transaction references directly
-	if (
-		ContentTypeReaction.sameAs(contentType) ||
-		ContentTypeWalletSendCalls.sameAs(contentType) ||
-		contentType.typeId === "transactionReference"
-	) {
-		await conversation.send(content, contentType);
-		return;
-	}
-
-	// Handle replies
-	if (ContentTypeReply.sameAs(contentType)) {
-		await conversation.send(content, contentType);
-		return;
-	}
-
-	// Default: send with content type
-	await conversation.send(content, contentType);
-};
 
 interface User {
 	key: `0x${string}`;
