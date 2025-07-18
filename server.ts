@@ -324,79 +324,81 @@ const handleStream = async () => {
 					continue;
 				}
 
-				// if is DM or Group message, get the conversation messages
-				if (isDm || isGroup && messageContent) {
-          const senderInboxId = message.senderInboxId;
-          const conversation = await client.conversations.getConversationById(
-            senderInboxId,
-          );
-
-          // if client hasn't sent any messages, do welcome.
-
-          const clientHasMessagedConversation = conversation?.members.some(
-            senderInboxId === clientInboxId)
-
-            if (clientHasMessagedConversation) {
-              continue;
-            }
-
-
-
-				const isReplyToAgent = (message: DecodedMessage) => {
-					const replyContent = message.content as Reply;
-					const referenceMessage = client.conversations.getMessageById(
-						replyContent.reference,
+				// if is DM or Group message, handle the conversation
+				if ((isDm || isGroup) && messageContent) {
+					// Check if this is the agent's first message in the conversation
+					const messages = await conversation.messages();
+					const hasAgentReplied = messages.some(
+						(msg) => msg.senderInboxId === clientInboxId
 					);
-					return referenceMessage?.senderInboxId === clientInboxId;
-				};
 
-				const isTaggingClient = (messageContent: string) => {
-					const clientTags = [
-						`@${clientEvmAddress}`,
-						`@${AGENT_CHAT_ID}`,
-						"@bitte",
-					];
-					return clientTags.some((tag) =>
-						messageContent.toLowerCase().includes(tag.toLowerCase()),
-					);
-				};
+					// Send welcome message if it's the agent's first interaction
+					if (!hasAgentReplied) {
+						await sendMessage(conversation, {
+							content: WELCOME_MESSAGE,
+							contentType: ContentTypeText,
+							isGroup,
+						});
+					}
 
-				// skip group messages with no mention or reply to client
-				if (
-					isGroup &&
-					!isTaggingClient(messageContent) &&
-					!isReplyToAgent(message)
-				)
-					continue;
+					// Helper functions for group chat filtering
+					const isReplyToAgent = (message: DecodedMessage) => {
+						if (!message.contentType.sameAs(ContentTypeReply)) return false;
+						const replyContent = message.content as Reply;
+						return messages.some(
+							(msg) => msg.id === replyContent.reference && msg.senderInboxId === clientInboxId
+						);
+					};
 
-				const reaction = await generateReaction({
-					messageContent,
-					reference: message.id,
-					referenceInboxId: senderInboxId,
-				});
+					const isTaggingClient = (messageContent: string) => {
+						const clientTags = [
+							`@${clientEvmAddress}`,
+							`@${AGENT_CHAT_ID}`,
+							"@bitte",
+						];
+						return clientTags.some((tag) =>
+							messageContent.toLowerCase().includes(tag.toLowerCase()),
+						);
+					};
 
-				// Add a reaction to the received message
-				await sendMessage(conversation, {
-					content: reaction,
-					reference: message.id,
-					contentType: ContentTypeReaction,
-					referenceInboxId: senderInboxId,
-					isGroup,
-				});
+					// Skip group messages with no mention or reply to client
+					if (
+						isGroup &&
+						!isTaggingClient(messageContent) &&
+						!isReplyToAgent(message)
+					) {
+						continue;
+					}
 
-				const chatId = `xmtp-${conversation.id}`;
-				console.log("CHAT ID", chatId);
+					// Generate and send a reaction
+					const reaction = await generateReaction({
+						messageContent,
+						reference: message.id,
+						referenceInboxId: senderInboxId,
+					});
 
-				const inboxState = await client.preferences.inboxStateFromInboxIds([
-					senderInboxId,
-				]);
-				const addressFromInboxId =
-					inboxState?.[0]?.identifiers?.[0]?.identifier;
+					await sendMessage(conversation, {
+						content: reaction,
+						reference: message.id,
+						contentType: ContentTypeReaction,
+						referenceInboxId: senderInboxId,
+						isGroup,
+					});
 
-				/* Get the AI response */
-				const completion: CompletionResponse = await sendToAgent({
-					chatId,
-					systemMessage: `This is Base Wallet ${isGroup ? "group" : "DM"} chat 
+					// Get sender's EVM address
+					const inboxState = await client.preferences.inboxStateFromInboxIds([
+						senderInboxId,
+					]);
+					const addressFromInboxId =
+						inboxState?.[0]?.identifiers?.[0]?.identifier;
+
+					const chatId = `xmtp-${conversation.id}`;
+					console.log("CHAT ID", chatId);
+
+					// Get AI response
+					const completion: CompletionResponse = await sendToAgent({
+						chatId,
+						systemMessage: `This is Base Wallet ${isGroup ? "group" : "DM"} chat 
 using XMTP. Keep responses brief when possible. Use plain text, with occasional emojis. Here is your welcome message / persona that is sent to each new user: ${WELCOME_MESSAGE}.  The users EVM address is ${addressFromInboxId}.
 
 ** Important Rules **
@@ -419,13 +421,78 @@ Use as many tool calls as possible to fulfill the user's requests.
 - Get portfolio information with "get-portfolio".
 - Fetch quotes and present order transactions with the "swap" tool on on CowSwap with "get-cowswap-orders".
 - Generate and present EVM transactions with "generate-evm-tx" for swaps, transfers, and basic transactions.`,
-					message: messageContent,
-					evmAddress: addressFromInboxId,
-				});
+						message: messageContent,
+						evmAddress: addressFromInboxId,
+					});
 
-				console.log("COMPLETION", JSON.stringify(completion.content, null, 2));
+					console.log("COMPLETION", JSON.stringify(completion.content, null, 2));
+
+					// Handle tool calls and transaction references
+					if (completion.toolCalls && completion.toolCalls.length > 0) {
+						for (const toolCall of completion.toolCalls) {
+							if ('result' in toolCall && toolCall.result?.data) {
+								const data = toolCall.result.data;
+								
+								// Handle EVM sign requests
+								if ('evmSignRequest' in data && data.evmSignRequest) {
+									const signRequest = data.evmSignRequest;
+									const walletSendCalls: WalletSendCallsParams = {
+										version: "1.0",
+										from: addressFromInboxId as `0x${string}`,
+										chainId: `0x${signRequest.chainId.toString(16)}`,
+										calls: signRequest.params.map((param) => ({
+											to: param.to as `0x${string}`,
+											data: param.data as `0x${string}`,
+											value: param.value as `0x${string}`,
+										})),
+									};
+
+									await sendMessage(conversation, {
+										content: walletSendCalls,
+										contentType: ContentTypeWalletSendCalls,
+										reference: message.id,
+										referenceInboxId: senderInboxId,
+										isGroup,
+									});
+								}
+
+								// Handle swap transactions
+								if ('swapArgs' in data && data.swapArgs) {
+									// Process swap transaction if needed
+									console.log("Swap args:", data.swapArgs);
+								}
+							}
+						}
+					}
+
+					// Send AI response as a reply
+					if (completion.content) {
+						const reply: Reply = {
+							reference: message.id,
+							contentType: ContentTypeText,
+							content: completion.content,
+						};
+
+						await sendMessage(conversation, {
+							content: reply,
+							contentType: ContentTypeReply,
+							reference: message.id,
+							referenceInboxId: senderInboxId,
+							isGroup,
+						});
+					}
+				}
+			} catch (error) {
+				console.error("❌ Error processing message:", error);
 			}
+		}
+	} catch (error) {
+		console.error("❌ Stream error:", error);
+		onFail();
+	}
+};
 
-
+// Start the stream handling
+handleStream();
 
       

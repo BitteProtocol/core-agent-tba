@@ -2,6 +2,7 @@ import { getRandomValues } from "node:crypto";
 import fs from "node:fs";
 import { ContentTypeReaction } from "@xmtp/content-type-reaction";
 import { ContentTypeReply, type Reply } from "@xmtp/content-type-reply";
+import { ContentTypeText } from "@xmtp/content-type-text";
 import { ContentTypeWalletSendCalls } from "@xmtp/content-type-wallet-send-calls";
 import type { Conversation, DecodedMessage } from "@xmtp/node-sdk";
 import { type Client, IdentifierKind, type Signer } from "@xmtp/node-sdk";
@@ -20,33 +21,37 @@ export const sendMessage = async (
 		referenceInboxId,
 		isGroup = false,
 	}: {
-		content: Reply | ClientContentTypes;
-		contentType: typeof ContentTypeReaction | typeof ContentTypeReply;
+		content: any; // Allow any content type
+		contentType: any; // Allow any content type
 		reference?: string;
 		referenceInboxId?: string;
 		isGroup?: boolean;
 	},
 ) => {
-	// normal message or reaction for non group messages and
-	if (!reference || !isGroup || ContentTypeReaction.sameAs(contentType)) {
-		await conversation.send(content, contentType);
-	} else {
-		// maintain wallet content type for wallet send calls
-		const hasWalletSendCalls = ContentTypeWalletSendCalls.sameAs(contentType);
-
-		const messageContent = {
-			content,
-			contentType,
-			reference,
-			referenceInboxId,
-		};
-
-		const messageContentType = hasWalletSendCalls
-			? contentType
-			: ContentTypeReply;
-
-		await conversation.send(messageContent, messageContentType);
+	// Send plain text messages directly
+	if (!contentType || contentType.typeId === "text") {
+		await conversation.send(content);
+		return;
 	}
+
+	// Send reactions, wallet send calls, and transaction references directly
+	if (
+		ContentTypeReaction.sameAs(contentType) ||
+		ContentTypeWalletSendCalls.sameAs(contentType) ||
+		contentType.typeId === "transactionReference"
+	) {
+		await conversation.send(content, contentType);
+		return;
+	}
+
+	// Handle replies
+	if (ContentTypeReply.sameAs(contentType)) {
+		await conversation.send(content, contentType);
+		return;
+	}
+
+	// Default: send with content type
+	await conversation.send(content, contentType);
 };
 
 interface User {
