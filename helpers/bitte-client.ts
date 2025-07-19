@@ -1,13 +1,6 @@
 import { type ChatRequest, generateId, type ToolInvocation } from "ai";
 import { BITTE_API_KEY, CHAT_API_URL, DEFAULT_AGENT_ID } from "./config";
 
-type SendToAgentParams = {
-	chatId: string;
-	message: string;
-	evmAddress: string;
-	agentId?: string;
-	systemMessage?: string;
-};
 /** Template literal type for NEAR key pair strings */
 export type KeyPairString = `ed25519:${string}` | `secp256k1:${string}`;
 /**
@@ -32,44 +25,55 @@ export async function sendToAgent({
 	message,
 	evmAddress,
 	agentId = DEFAULT_AGENT_ID,
-	systemMessage,
-}: SendToAgentParams) {
+	contextMessage,
+	instructionsOverride,
+}: {
+	chatId: string;
+	message: string;
+	evmAddress: string;
+	agentId?: string;
+	contextMessage?: string;
+	instructionsOverride?: string;
+}) {
+	const messagesWithContext: ChatRequest["messages"] = [
+		...(contextMessage
+			? [
+					{
+						id: generateId(),
+						createdAt: new Date(),
+						role: "system" as const,
+						content: contextMessage,
+					},
+				]
+			: []),
+		{
+			id: generateId(),
+			createdAt: new Date(),
+			role: "user" as const,
+			content: message,
+			parts: [
+				{
+					type: "text",
+					text: message,
+				},
+			],
+		},
+	];
+
 	const payload: ChatRequest & {
 		id: string;
 		evmAddress: string;
-		config: { mode: "debug"; agentId: string };
+		config: { agentId: string; instructionsOverride?: string };
 	} = {
 		id: chatId,
-		messages: [
-			...(systemMessage
-				? [
-						{
-							id: generateId(),
-							createdAt: new Date(),
-							role: "system" as const,
-							content: systemMessage,
-						},
-					]
-				: []),
-			{
-				id: generateId(),
-				createdAt: new Date(),
-				role: "user",
-				content: message,
-				parts: [
-					{
-						type: "text",
-						text: message,
-					},
-				],
-			},
-		],
+		messages: messagesWithContext,
 		config: {
-			mode: "debug",
 			agentId,
+			instructionsOverride,
 		},
 		evmAddress,
 	};
+
 	try {
 		const response = await fetch(CHAT_API_URL, {
 			method: "POST",

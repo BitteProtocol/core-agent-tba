@@ -391,7 +391,9 @@ const handleStream = async () => {
 					// Get AI response
 					const completion: CompletionResponse = await sendToAgent({
 						chatId,
-						systemMessage: `This is Base Wallet ${isGroup ? "group" : "DM"} chat 
+						message: messageContent,
+						evmAddress: addressFromInboxId,
+						instructionsOverride: `This is Base Wallet ${isGroup ? "group" : "DM"} chat 
 using XMTP. Keep responses brief when possible. Use plain text, with occasional emojis. Here is your welcome message / persona that is sent to each new user: ${WELCOME_MESSAGE}.  The users EVM address is ${addressFromInboxId}.
 
 ** Important Rules **
@@ -414,12 +416,10 @@ Use as many tool calls as possible to fulfill the user's requests.
 - Get portfolio information with "get-portfolio".
 - Fetch quotes and present order transactions with the "swap" tool on on CowSwap with "get-cowswap-orders".
 - Generate and present EVM transactions with "generate-evm-tx" for swaps, transfers, and basic transactions.`,
-						message: messageContent,
-						evmAddress: addressFromInboxId,
 					});
 
 					console.log(
-						"COMPLETION",
+						"BITTE COMPLETION",
 						JSON.stringify(completion.content, null, 2),
 					);
 
