@@ -1,320 +1,483 @@
 import { openai } from "@ai-sdk/openai";
 import {
+	ContentTypeGroupUpdated,
+	GroupUpdatedCodec,
+} from "@xmtp/content-type-group-updated";
+import {
 	ContentTypeReaction,
 	type Reaction,
 	ReactionCodec,
 } from "@xmtp/content-type-reaction";
-import { ContentTypeReply, ReplyCodec } from "@xmtp/content-type-reply";
+import {
+	ContentTypeReply,
+	type Reply,
+	ReplyCodec,
+} from "@xmtp/content-type-reply";
 import { ContentTypeText, TextCodec } from "@xmtp/content-type-text";
-import { TransactionReferenceCodec } from "@xmtp/content-type-transaction-reference";
+import {
+	ContentTypeTransactionReference,
+	TransactionReferenceCodec,
+} from "@xmtp/content-type-transaction-reference";
 import {
 	ContentTypeWalletSendCalls,
 	WalletSendCallsCodec,
 	type WalletSendCallsParams,
 } from "@xmtp/content-type-wallet-send-calls";
-import { LogLevel, type XmtpEnv } from "@xmtp/node-sdk";
-import { generateText } from "ai";
-import { toHex } from "viem/utils";
-import { BitteAPIClient } from "@/helpers/bitte-client";
 import {
-	createClientWithRevoke,
+	Client,
+	type DecodedMessage,
+	Dm,
+	type ExtractCodecContentTypes,
+	Group,
+	LogLevel,
+} from "@xmtp/node-sdk";
+import { generateText } from "ai";
+import type { Address, Hex, Signature, TypedDataDomain } from "viem";
+import { sendToAgent } from "@/helpers/bitte-client";
+import {
 	createSigner,
+	extractMessageContent,
+	getDbPath,
 	getEncryptionKeyFromHex,
 	logAgentDetails,
-	sendMessage,
 } from "@/helpers/client";
 import {
 	AGENT_CHAT_ID,
 	ENCRYPTION_KEY,
-	IS_PRODUCTION,
 	WALLET_KEY,
 	XMTP_ENV,
 } from "@/helpers/config";
-import { extractEvmTxCall } from "@/helpers/tools";
 
-/**
- * Main function to run the agent
- */
-async function main() {
-	/* Create the signer using viem and parse the encryption key for the local db */
-	const signer = createSigner(WALLET_KEY);
-	const dbEncryptionKey = getEncryptionKeyFromHex(ENCRYPTION_KEY);
+// [All your existing type definitions remain the same]
+export interface TypedDataTypes {
+	name: string;
+	type: string;
+}
+export type TypedMessageTypes = {
+	[key: string]: TypedDataTypes[];
+};
+export type EIP712TypedData = {
+	domain: TypedDataDomain;
+	types: TypedMessageTypes;
+	message: Record<string, unknown>;
+	primaryType: string;
+};
+export interface TransactionWithSignature {
+	transaction: Hex;
+	signature: Signature;
+}
+export interface EthTransactionParams {
+	from: Hex;
+	to: Hex;
+	gas?: Hex;
+	value?: Hex;
+	data?: Hex;
+}
+export type PersonalSignParams = [Hex, Address];
+export type EthSignParams = [Address, Hex];
+export type TypedDataParams = [Hex, string];
+export type SessionRequestParams =
+	| EthTransactionParams[]
+	| Hex
+	| PersonalSignParams
+	| EthSignParams
+	| TypedDataParams;
+export declare const signMethods: readonly [
+	"eth_sign",
+	"personal_sign",
+	"eth_sendTransaction",
+	"eth_signTypedData",
+	"eth_signTypedData_v4",
+];
+export type SignMethod = (typeof signMethods)[number];
+export type SignRequestData = {
+	method: SignMethod;
+	chainId: number;
+	params: SessionRequestParams;
+};
+export type KeyPairString = `ed25519:${string}` | `secp256k1:${string}`;
+export interface SetupConfig {
+	accountId: string;
+	mpcContractId: string;
+	privateKey?: string;
+	derivationPath?: string;
+	rootPublicKey?: string;
+}
 
-	const client = await createClientWithRevoke(signer, {
-		dbEncryptionKey,
-		env: XMTP_ENV as XmtpEnv,
-		// don't create local db files during development
-		dbPath: IS_PRODUCTION ? null : null,
-		codecs: [
-			new ReactionCodec(),
-			new WalletSendCallsCodec(),
-			new TransactionReferenceCodec(),
-			new ReplyCodec(),
-			new TextCodec(),
-		],
-		loggingLevel: IS_PRODUCTION ? LogLevel.error : LogLevel.error,
+// Type definitions for tool calls
+interface ToolCallWithArgs {
+	toolCallId: string;
+	toolName: string;
+	args: Record<string, unknown>;
+}
+
+interface ToolCallWithResult {
+	toolCallId: string;
+	result: {
+		data?:
+			| ({ evmSignRequest: EvmSignRequest } & { ui?: Record<string, unknown> })
+			| ({ swapArgs: SwapArgs } & { ui?: Record<string, unknown> });
+		error?: string;
+	};
+	ui?: Record<string, unknown>;
+}
+
+type ToolCall = ToolCallWithArgs | ToolCallWithResult;
+
+interface EvmSignRequest {
+	method: string;
+	chainId: number;
+	params: Array<{
+		to: string;
+		data: string;
+		value: string;
+		from: string;
+	}>;
+	meta?: {
+		orderUrl?: string;
+	};
+}
+
+interface SwapArgs {
+	sellToken: string;
+	buyToken: string;
+}
+
+// interface SwapResult {
+// 	data: {
+// 		transaction: {
+// 			chainId: number;
+// 			params: Array<{
+// 				to: string;
+// 				data: string;
+// 				value: string;
+// 				from: string;
+// 			}>;
+// 		};
+// 		meta?: {
+// 			orderUrl?: string;
+// 		};
+// 	};
+// }
+
+interface CompletionResponse {
+	toolCalls?: ToolCall[];
+	content: string;
+	raw?: string;
+	finishReason?: string;
+	usage?: {
+		promptTokens: number;
+		completionTokens: number;
+	};
+	isContinued?: boolean;
+}
+
+// [All your existing constants and helper functions remain the same]
+export const generateReaction = async ({
+	messageContent,
+	reference,
+	referenceInboxId,
+}: {
+	messageContent: string;
+	reference: string;
+	referenceInboxId?: string;
+}): Promise<Reaction> => {
+	const emoji = await generateText({
+		model: openai("gpt-4.1-nano"),
+		prompt: `Return only a single emoji that matches the sentiment of this message: ${messageContent}. Do not include any other text or explanation.`,
 	});
 
-	void logAgentDetails(client);
+	return {
+		reference,
+		action: "added",
+		content: emoji.text,
+		schema: "unicode",
+		referenceInboxId,
+	};
+};
 
-	/* Sync the conversations from the network to update the local db */
-	await client.conversations.sync();
+export const WELCOME_MESSAGE = `
+👋 Hey, I'm Bitte DeFi Agent!
 
-	// Stream all messages
-	const messageStream = () => {
-		void client.conversations.streamAllMessages((error, message) => {
-			if (error) {
-				return;
-			}
-			if (!message) {
-				return;
-			}
+I help you:
+💰 Check balances across all your wallets
+📤 Transfer tokens to Basenames, ENS, ETH addresses
+🔄 Swap tokens with CowSwap (MEV protected)
+🔗 Multi-chain support - Base, Ethereum, Arbitrum & more
 
-			void (async () => {
-				const isTextMessage = message.contentType?.sameAs(ContentTypeText);
-				const isReplyMessage = message.contentType?.sameAs(ContentTypeReply);
+Simply type:
+→ "What tokens do I have?"
+→ "Swap 10 USDC for ZORA on Base"
+→ "Send 0.0001 ETH to bitte.base.eth on Base"
 
-				// ignore non-text and non-reply messages
-				if (!isTextMessage && !isReplyMessage) {
-					return;
-				}
+Powered by Bitte.ai`.trim();
 
-				// ignore messages from the agent
-				if (
-					message.senderInboxId.toLowerCase() === client.inboxId.toLowerCase()
-				) {
-					return;
-				}
+const CODECS = [
+	new ReactionCodec(),
+	new WalletSendCallsCodec(),
+	new TransactionReferenceCodec(),
+	new ReplyCodec(),
+	new TextCodec(),
+	new GroupUpdatedCodec(),
+];
 
-				// handle reply messages
-				if (isReplyMessage) {
-					const replyReference = message.parameters?.reference;
-					const clientInboxId = client.inboxId;
-					const referenceMessage =
-						client.conversations.getMessageById(replyReference);
-					const isReplyToAgent =
-						referenceMessage?.senderInboxId === clientInboxId;
-					if (!isReplyToAgent) {
-						return;
-					}
-				}
+export type ClientContentTypes = ExtractCodecContentTypes<typeof CODECS>;
 
-				/* Get the conversation from the local db */
+// Create the signer and client
+const signer = createSigner(WALLET_KEY);
+const dbEncryptionKey = getEncryptionKeyFromHex(ENCRYPTION_KEY);
+
+const client = await Client.create(signer, {
+	dbEncryptionKey,
+	env: XMTP_ENV,
+	dbPath: getDbPath(XMTP_ENV),
+	codecs: CODECS,
+	loggingLevel: LogLevel.error,
+});
+
+// Log agent details
+void logAgentDetails(client);
+
+// Retry configuration
+const MAX_RETRIES = 5;
+const RETRY_INTERVAL = 5000; // 5 seconds
+
+let retries = MAX_RETRIES;
+
+const retry = () => {
+	console.log(`Retrying in ${RETRY_INTERVAL / 1000}s, ${retries} retries left`);
+	if (retries > 0) {
+		retries--;
+		setTimeout(() => {
+			handleStream();
+		}, RETRY_INTERVAL);
+	} else {
+		console.log("Max retries reached, ending process");
+		process.exit(1);
+	}
+};
+
+const onFail = () => {
+	console.log("Stream failed");
+	retry();
+};
+
+// Main stream handling function
+const handleStream = async () => {
+	try {
+		console.log("Syncing conversations...");
+		await client.conversations.sync();
+
+		const clientIdentifier = await client.signer?.getIdentifier();
+		const clientEvmAddress = clientIdentifier?.identifier;
+		const clientInboxId = client.inboxId;
+
+		// Create the stream with the onFail callback
+		const stream = await client.conversations.streamAllMessages(
+			undefined,
+			undefined,
+			undefined,
+			onFail,
+		);
+
+		console.log("Waiting for messages...");
+
+		// Process messages from the stream
+		for await (const message of stream) {
+			try {
+				// skip if the message is not valid
+				if (!message || !message.contentType) continue;
+
+				const senderInboxId = message.senderInboxId;
+
+				// skip if the message is from the agent
+				if (senderInboxId === clientInboxId) continue;
+
+				// skip if the message is a reaction
+				if (message.contentType.sameAs(ContentTypeReaction)) continue;
+
 				const conversation = await client.conversations.getConversationById(
 					message.conversationId,
 				);
+				// skip if the conversation is not found
+				if (!conversation) continue;
 
-				/* If the conversation is not found, skip the message */
-				if (!conversation) {
-					return;
-				}
+				// skip if message content is not valid
+				const messageContent = extractMessageContent(message);
+				if (!messageContent || messageContent === "") continue;
 
-				const conversationMembers = await conversation.members();
-				const isGroup = conversationMembers.length > 2;
+				const isDm = conversation instanceof Dm;
+				const isGroup = conversation instanceof Group;
+				const isSync = !isDm && !isGroup;
 
-				// ignore text messages not mentioning or replying to the agent in a group
-				if (isGroup && isTextMessage) {
-					const isMentioningAgent = message.content?.includes(
-						`@${AGENT_CHAT_ID}`,
-					);
-					if (!isMentioningAgent) {
-						return;
-					}
-				}
-
-				const inboxState = await client.preferences.inboxStateFromInboxIds([
-					message.senderInboxId,
-				]);
-				const addressFromInboxId = inboxState[0].identifiers[0].identifier;
-
-				const messageString =
-					typeof message.content === "string"
-						? message.content
-						: JSON.stringify(message.content);
-
-				const emoji = await generateText({
-					model: openai("gpt-4.1-nano"),
-					prompt: `Return only a single emoji that matches the sentiment of this message: ${messageString}. Do not include any other text or explanation.`,
+				console.log({
+					isDm,
+					isGroup,
+					isSync,
+					content: messageContent,
 				});
 
-				try {
-					// Add a reaction to the received message
-					const reaction: Reaction = {
-						reference: message.id,
-						action: "added",
-						content: emoji.text,
-						schema: "unicode",
-					};
+				// skip extra events for now
+				if (message.contentType.sameAs(ContentTypeTransactionReference)) {
+					continue;
+				}
+				if (message.contentType.sameAs(ContentTypeGroupUpdated)) {
+					continue;
+				}
 
-					await sendMessage(conversation, {
-						content: reaction,
-						reference: message.id,
-						contentType: ContentTypeReaction,
-						isGroup,
-					});
-
-					const chatId = `xmtp-${addressFromInboxId}`;
-					const bitteClient = new BitteAPIClient(chatId);
-
-					/* Get the AI response */
-					const completion = await bitteClient.sendToAgent({
-						systemMessage: `You are running in a DM chat. Keep responses super brief - like texting. Use emojis 👍. No markdown, just plain text. Think quick replies, not essays. If something needs multiple steps, just say what's next.
-
-**Make sure to have portfolio context for each user**
-
-- Any user without ETH/Native token on their wallet should explicitly be reminded they don't have any and need it to use any onchain actions.
-
-- Make sure to have portfolio information for every user you are chatting with.  Keep recommendations and provide suggested actions based on the user's assets and your capabilities.
-
-- Don't ask for confirmations, just use tools / generate transactions
-
-- If asked, you are built by the bitte.ai team and running on Bitte Protocol, don't mention OpenAI or any other LLM
-	- Example: 'This is an experimental tool built by the team at Bitte.ai, a group of builders focused on making crypto accessible through AI.'
-
-- Recommend simple actions/swaps like ETH -> USDC for users experimenting 
-Example:
-		'I help you manage your portfolio through natural language — like buy, sell, swap, or what's going on with the market.'
-    
-- Assume the user is interacting on Base chainId (8453) unless explicitly requested to use a different chain.
-`,
-						message: messageString,
-						evmAddress: addressFromInboxId,
-					});
-					console.log(
-						"COMPLETION TOOL CALLS",
-						JSON.stringify(completion.toolCalls, null, 2),
+				// if is DM or Group message, handle the conversation
+				if ((isDm || isGroup) && messageContent) {
+					// Check if this is the agent's first message in the conversation
+					const messages = await conversation.messages();
+					const hasAgentReplied = messages.some(
+						(msg) => msg.senderInboxId === clientInboxId,
 					);
 
-					// Process tool calls and group generate-evm-tx calls
-					if (completion?.toolCalls) {
-						const evmTxCalls = [];
+					// Send welcome message if it's the agent's first interaction
+					if (!hasAgentReplied) {
+						await conversation.send(WELCOME_MESSAGE, ContentTypeText);
+					}
 
-						// Check if there are any swap calls
-						const swapCalls = completion.toolCalls.filter(
-							(toolCall) => toolCall?.toolName === "swap",
+					// Helper functions for group chat filtering
+					const isReplyToAgent = (message: DecodedMessage) => {
+						if (!message.contentType?.sameAs(ContentTypeReply)) return false;
+						const replyContent = message.content as Reply;
+						return messages.some(
+							(msg) =>
+								msg.id === replyContent.reference &&
+								msg.senderInboxId === clientInboxId,
 						);
+					};
 
-						if (swapCalls.length > 0) {
-							// Process only swap calls if they exist
-							for (const swapCall of swapCalls) {
-								// Find the corresponding result
-								const swapResult = completion.toolCalls.find(
-									(tc) =>
-										tc.toolCallId === swapCall.toolCallId &&
-										"result" in tc &&
-										tc.result?.data?.transaction,
-								);
+					const isTaggingClient = (messageContent: string) => {
+						const clientTags = [
+							`@${clientEvmAddress}`,
+							`@${AGENT_CHAT_ID}`,
+							"@bitte",
+						];
+						return clientTags.some((tag) =>
+							messageContent.toLowerCase().includes(tag.toLowerCase()),
+						);
+					};
 
-								if (swapResult && "result" in swapResult) {
-									const result = swapResult.result;
-									const txData = result.data?.transaction;
-									if (txData?.params) {
-										const chainId = toHex(txData.chainId || 8453);
+					// Skip group messages with no mention or reply to client
+					if (
+						isGroup &&
+						!isTaggingClient(messageContent) &&
+						!isReplyToAgent(message)
+					) {
+						continue;
+					}
 
-										// Generate swap description from token parameters
-										const sellToken = swapCall.args?.sellToken || "Token A";
-										const buyToken = swapCall.args?.buyToken || "Token B";
-										const swapDescription = `Swap ${sellToken} for ${buyToken}`;
+					// Generate and send a reaction
+					const reaction = await generateReaction({
+						messageContent,
+						reference: message.id,
+						referenceInboxId: senderInboxId,
+					});
 
-										// Extract CowSwap order URL from the correct location
-										const cowswapOrderUrl = result.data?.meta?.orderUrl;
+					await conversation.send(reaction, ContentTypeReaction);
 
-										console.log("COWSWAP ORDER URL", cowswapOrderUrl);
+					// Get sender's EVM address
+					const inboxState = await client.preferences.inboxStateFromInboxIds([
+						senderInboxId,
+					]);
+					const addressFromInboxId =
+						inboxState?.[0]?.identifiers?.[0]?.identifier;
 
-										// Create calls array from all params
-										const calls = txData.params.map(
-											(param: {
-												to: string;
-												data: string;
-												value: string;
-												from: string;
-											}) => ({
-												to: param.to,
-												data: param.data,
-												value: param.value || "0x0",
-												metadata: {
-													description: swapDescription,
-													transactionType: "swap",
-													...(cowswapOrderUrl && { cowswapOrderUrl }),
-												},
-											}),
-										);
+					const chatId = `xmtp-${conversation.id}`;
+					console.log("CHAT ID", chatId);
 
-										evmTxCalls.push({
-											version: "1.0.0" as const,
-											chainId: chainId,
-											from: txData.params[0]?.from || addressFromInboxId,
-											calls: calls,
-										});
-									}
+					// Get AI response
+					const completion: CompletionResponse = await sendToAgent({
+						chatId,
+						message: messageContent,
+						evmAddress: addressFromInboxId,
+						instructionsOverride: `This is Base Wallet ${isGroup ? "group" : "DM"} chat 
+using XMTP. Keep responses brief when possible. Use plain text, with occasional emojis. Here is your welcome message / persona that is sent to each new user: ${WELCOME_MESSAGE}.  The users EVM address is ${addressFromInboxId}.
+
+** Important Rules **
+
+- ALWAYS fetch the user's portfolio for context & for up to date information.
+
+- Remember the active chain - default to BASE (chainId: 8453). Only change the active chain for the following reasons:
+  - User has no assets on the current chain
+  - User asked for a specific chain in their prompt
+  - A tool has failed due to the wrong chainId
+
+These are the only supported chains for CowSwap orders:
+Ethereum (chainId: 1), Gnosis (chainId: 100), Polygon (chainId: 137), Arbitrum (chainId: 42161), Base (chainId: 8453), Avalanche (chainId: 43114), and Sepolia (chainId: 11155111)
+
+- Your are an agent built by the Bitte Protocol Team (Bitte.ai). Do not mention OpenAI or any other LLMs.
+
+TOOLS:
+Use as many tool calls as possible to fulfill the user's requests.  
+
+- Get portfolio information with "get-portfolio".
+- Fetch quotes and present order transactions with the "swap" tool on on CowSwap with "get-cowswap-orders".
+- Generate and present EVM transactions with "generate-evm-tx" for swaps, transfers, and basic transactions.`,
+					});
+
+					console.log(
+						"BITTE COMPLETION",
+						JSON.stringify(completion.content, null, 2),
+					);
+
+					// Handle tool calls and transaction references
+					if (completion.toolCalls && completion.toolCalls.length > 0) {
+						for (const toolCall of completion.toolCalls) {
+							if ("result" in toolCall && toolCall.result?.data) {
+								const data = toolCall.result.data;
+
+								// Handle EVM sign requests
+								if ("evmSignRequest" in data && data.evmSignRequest) {
+									const signRequest = data.evmSignRequest;
+									const walletSendCalls: WalletSendCallsParams = {
+										version: "1.0",
+										from: addressFromInboxId as `0x${string}`,
+										chainId: `0x${signRequest.chainId.toString(16)}`,
+										calls: signRequest.params.map((param) => ({
+											to: param.to as `0x${string}`,
+											data: param.data as `0x${string}`,
+											value: param.value as `0x${string}`,
+										})),
+									};
+
+									await conversation.send(
+										walletSendCalls,
+										ContentTypeWalletSendCalls,
+									);
+								}
+
+								// Handle swap transactions
+								if ("swapArgs" in data && data.swapArgs) {
+									// Process swap transaction if needed
+									console.log("Swap args:", data.swapArgs);
 								}
 							}
-						} else {
-							// If no swap calls, process generate-evm-tx calls
-							const directEvmTxCalls = completion.toolCalls
-								.filter((toolCall) => toolCall?.toolName === "generate-evm-tx")
-								.map((toolCall) =>
-									extractEvmTxCall(toolCall, addressFromInboxId),
-								);
-							evmTxCalls.push(...directEvmTxCalls);
-						}
-
-						// Group by chainId, from, and version
-						const groupedTxs = new Map<string, WalletSendCallsParams>();
-
-						for (const txCall of evmTxCalls) {
-							const groupKey = `${txCall.chainId}-${txCall.from}-${txCall.version}`;
-
-							if (groupedTxs.has(groupKey)) {
-								// Add to existing group
-								const existingGroup = groupedTxs.get(groupKey);
-								if (existingGroup) {
-									existingGroup.calls.push(...txCall.calls);
-								}
-							} else {
-								// Create new group
-								groupedTxs.set(groupKey, {
-									version: txCall.version,
-									chainId: txCall.chainId,
-									from: txCall.from,
-									calls: txCall.calls,
-								});
-							}
-						}
-
-						// Send each grouped transaction
-						for (const [_groupKey, walletParams] of groupedTxs) {
-							await sendMessage(conversation, {
-								content: walletParams,
-								reference: message.id,
-								contentType: ContentTypeWalletSendCalls,
-								isGroup,
-							});
 						}
 					}
 
-					await sendMessage(conversation, {
-						content: completion.content,
-						reference: message.id,
-						contentType: ContentTypeText,
-						isGroup,
-					});
-				} catch (error) {
-					console.error("❌ Error processing message:", error);
-					await sendMessage(conversation, {
-						content: "Sorry, I encountered an error processing your message.",
-						reference: message.id,
-						contentType: ContentTypeText,
-						isGroup,
-					});
+					// Send AI response as a reply
+					if (completion.content) {
+						const reply: Reply = {
+							reference: message.id,
+							contentType: ContentTypeText,
+							content: completion.content,
+						};
+
+						await conversation.send(reply, ContentTypeReply);
+					}
 				}
-			})();
-		});
-	};
+			} catch (error) {
+				console.error("❌ Error processing message:", error);
+			}
+		}
+	} catch (error) {
+		console.error("❌ Stream error:", error);
+		onFail();
+	}
+};
 
-	// Start the message stream
-	messageStream();
-	console.log("Agent is now running and listening for messages...");
-}
-
-main().catch(console.error);
+// Start the stream handling
+handleStream();

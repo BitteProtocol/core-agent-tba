@@ -9,3 +9,10 @@ node_modules
 xmtp-*
 
 out/
+
+/.vscode/
+
+/dist
+
+# db
+./data
