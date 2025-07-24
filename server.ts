@@ -196,6 +196,7 @@ export const generateReaction = async ({
 	};
 };
 
+// Welcome message functionality - commented out but kept for future reference
 export const WELCOME_MESSAGE = `
 👋 Hey, I'm Bitte DeFi Agent!
 
@@ -327,18 +328,20 @@ const handleStream = async () => {
 
 				// if is DM or Group message, handle the conversation
 				if ((isDm || isGroup) && messageContent) {
-					// Check if this is the agent's first message in the conversation
-					const messages = await conversation.messages();
-					const hasAgentReplied = messages.some(
-						(msg) => msg.senderInboxId === clientInboxId,
-					);
+					// Welcome message functionality - commented out but kept for future reference
+					// // Check if this is the agent's first message in the conversation
+					// const messages = await conversation.messages();
+					// const hasAgentReplied = messages.some(
+					// 	(msg) => msg.senderInboxId === clientInboxId,
+					// );
 
-					// Send welcome message if it's the agent's first interaction
-					if (!hasAgentReplied) {
-						await conversation.send(WELCOME_MESSAGE, ContentTypeText);
-					}
+					// // Send welcome message if it's the agent's first interaction
+					// if (!hasAgentReplied) {
+					// 	await conversation.send(WELCOME_MESSAGE, ContentTypeText);
+					// }
 
 					// Helper functions for group chat filtering
+					const messages = await conversation.messages();
 					const isReplyToAgent = (message: DecodedMessage) => {
 						if (!message.contentType?.sameAs(ContentTypeReply)) return false;
 						const replyContent = message.content as Reply;
@@ -394,7 +397,7 @@ const handleStream = async () => {
 						message: messageContent,
 						evmAddress: addressFromInboxId,
 						instructionsOverride: `This is Base Wallet ${isGroup ? "group" : "DM"} chat 
-using XMTP. Keep responses brief when possible. Use plain text, with occasional emojis. Here is your welcome message / persona that is sent to each new user: ${WELCOME_MESSAGE}.  The users EVM address is ${addressFromInboxId}.
+using XMTP. Keep responses brief when possible. Use plain text, with occasional emojis. Here is your welcome message / persona that is sent to each new user: ${WELCOME_MESSAGE}. The users EVM address is ${addressFromInboxId}.
 
 ** Important Rules **
 
