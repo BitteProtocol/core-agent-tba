@@ -296,11 +296,18 @@ const handleStream = async () => {
 				// skip if the message is a reaction
 				if (message.contentType.sameAs(ContentTypeReaction)) continue;
 
+				console.log("Received message", message);
+
 				const conversation = await client.conversations.getConversationById(
 					message.conversationId,
 				);
 				// skip if the conversation is not found
-				if (!conversation) continue;
+				if (!conversation) {
+					console.log(
+						`Conversation with id ${message.conversationId} not found`,
+					);
+					continue;
+				}
 
 				// skip if message content is not valid
 				const messageContent = extractMessageContent(message);
