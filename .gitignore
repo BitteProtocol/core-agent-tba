@@ -14,5 +14,4 @@ out/
 
 /dist
 
-# db
-./data
+/.data/xmtp

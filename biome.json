@@ -6,6 +6,14 @@
 		"useIgnoreFile": true
 	},
 	"files": {
+		"includes": [
+			"**/*.ts",
+			"**/*.tsx",
+			"**/*.js",
+			"**/*.jsx",
+			"**/*.json",
+			"!**/dist/**"
+		],
 		"ignoreUnknown": false
 	},
 	"formatter": {

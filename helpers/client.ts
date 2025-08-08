@@ -137,7 +137,7 @@ export const logAgentDetails = async (
 /**
  * Extract message content from different message types
  *
- * Handles various XMTP message types including replies and regular text messages.
+ * Handles various XMTP message types including replies, transaction references, and regular text messages.
  * For reply messages, it attempts to extract the actual user content from
  * various possible locations in the message structure.
  *
@@ -145,6 +145,33 @@ export const logAgentDetails = async (
  * @returns The message content as a string
  */
 export function extractMessageContent(message: DecodedMessage): string {
+	// Handle transaction reference messages
+	if (message.contentType?.typeId === "transactionReference") {
+		const txContent = message.content;
+		if (txContent && typeof txContent === "object") {
+			// Extract transaction hash/reference from the content
+			if ("reference" in txContent) {
+				return `Transaction: ${String(txContent.reference)}`;
+			}
+			if ("hash" in txContent) {
+				return `Transaction: ${String(txContent.hash)}`;
+			}
+			if ("transactionHash" in txContent) {
+				return `Transaction: ${String(txContent.transactionHash)}`;
+			}
+			// If we have networkId, include it
+			if ("networkId" in txContent && "reference" in txContent) {
+				return `Transaction on chain ${txContent.networkId}: ${txContent.reference}`;
+			}
+		}
+		// Use fallback if available
+		if (message.fallback && typeof message.fallback === "string") {
+			return message.fallback;
+		}
+		// Last resort: stringify the content
+		return JSON.stringify(txContent);
+	}
+
 	// Handle reply messages
 	if (message.contentType?.typeId === "reply") {
 		const messageAny = message;
