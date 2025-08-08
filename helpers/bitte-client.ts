@@ -74,32 +74,102 @@ export async function sendToAgent({
 		evmAddress,
 	};
 
-	try {
-		const response = await fetch(CHAT_API_URL, {
-			method: "POST",
-			headers: {
-				"Content-Type": "application/json",
-				Authorization: `Bearer ${BITTE_API_KEY}`,
-			},
-			body: JSON.stringify(payload),
-		});
+	const maxRetries = 3;
+	let lastError: Error | null = null;
 
-		if (!response.ok) {
-			const errorText = await response.text();
-			throw new Error(
-				`Bitte API error: ${response.status} ${response.statusText} - ${errorText}`,
+	for (let attempt = 1; attempt <= maxRetries; attempt++) {
+		try {
+			const response = await fetch(CHAT_API_URL, {
+				method: "POST",
+				headers: {
+					"Content-Type": "application/json",
+					Authorization: `Bearer ${BITTE_API_KEY}`,
+				},
+				body: JSON.stringify(payload),
+			});
+
+			if (!response.ok) {
+				const errorText = await response.text();
+				const error = new Error(
+					`Bitte API error: ${response.status} ${response.statusText} - ${errorText}`,
+				);
+				lastError = error;
+
+				// If this is the last attempt or it's not a retryable error, don't retry
+				if (attempt === maxRetries || !isRetryableError(response.status)) {
+					throw error;
+				}
+
+				console.warn(
+					`⚠️  Attempt ${attempt}/${maxRetries} failed, retrying in ${getDelayMs(attempt)}ms...`,
+				);
+				await sleep(getDelayMs(attempt));
+				continue;
+			}
+
+			// Parse the streaming response
+			const responseText = await response.text();
+			const parsedResponse = parseStreamingResponse(responseText);
+
+			// Success - log if we had to retry
+			if (attempt > 1) {
+				console.log(
+					`✅ Request succeeded on retry attempt ${attempt}/${maxRetries}`,
+				);
+			}
+
+			return parsedResponse;
+		} catch (error) {
+			lastError = error as Error;
+
+			// If this is the last attempt, break out of the loop
+			if (attempt === maxRetries) {
+				break;
+			}
+
+			console.warn(
+				`⚠️  Attempt ${attempt}/${maxRetries} failed: ${error}, retrying in ${getDelayMs(attempt)}ms...`,
 			);
+			await sleep(getDelayMs(attempt));
 		}
-
-		// Parse the streaming response
-		const responseText = await response.text();
-		const parsedResponse = parseStreamingResponse(responseText);
-
-		return parsedResponse;
-	} catch (error) {
-		console.error("❌ Bitte API request failed:", error);
-		throw error;
 	}
+
+	// All retries failed - return a user-friendly error response
+	console.error("❌ All retry attempts failed:", lastError);
+
+	return {
+		messageId: generateId(),
+		content:
+			"I'm sorry, but I'm experiencing some technical difficulties right now. Please try again in a few moments.",
+		finishReason: "error",
+		usage: null,
+		toolCalls: [],
+		raw: "",
+		isError: true,
+	};
+}
+
+/**
+ * Check if an HTTP status code is retryable
+ */
+function isRetryableError(status: number): boolean {
+	// Retry on server errors (5xx) and rate limiting (429)
+	return status >= 500 || status === 429;
+}
+
+/**
+ * Calculate delay for exponential backoff
+ */
+function getDelayMs(attempt: number): number {
+	// Base delay of 1 second, doubling each attempt: 1s, 2s, 4s
+	return Math.min(1000 * 2 ** (attempt - 1), 10000);
+}
+
+/**
+ * Sleep for the specified number of milliseconds
+ */
+function sleep(ms: number): Promise<void> {
+	return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 /**

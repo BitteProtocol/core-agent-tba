@@ -25,6 +25,7 @@ import {
 } from "@xmtp/content-type-wallet-send-calls";
 import {
 	Client,
+	ConsentState,
 	type DecodedMessage,
 	Dm,
 	type ExtractCodecContentTypes,
@@ -127,12 +128,7 @@ type ToolCall = ToolCallWithArgs | ToolCallWithResult;
 interface EvmSignRequest {
 	method: string;
 	chainId: number;
-	params: Array<{
-		to: string;
-		data: string;
-		value: string;
-		from: string;
-	}>;
+	params: SessionRequestParams;
 	meta?: {
 		orderUrl?: string;
 	};
@@ -168,8 +164,9 @@ interface CompletionResponse {
 	usage?: {
 		promptTokens: number;
 		completionTokens: number;
-	};
+	} | null;
 	isContinued?: boolean;
+	isError?: boolean;
 }
 
 // [All your existing constants and helper functions remain the same]
@@ -265,20 +262,19 @@ const onFail = () => {
 // Main stream handling function
 const handleStream = async () => {
 	try {
-		console.log("Syncing conversations...");
-		await client.conversations.sync();
-
 		const clientIdentifier = await client.signer?.getIdentifier();
 		const clientEvmAddress = clientIdentifier?.identifier;
 		const clientInboxId = client.inboxId;
 
-		// Create the stream with the onFail callback
-		const stream = await client.conversations.streamAllMessages(
-			undefined,
-			undefined,
-			undefined,
+		await client.conversations.syncAll([ConsentState.Allowed]);
+		console.log("Synced all conversations");
+
+		const stream = await client.conversations.streamAllMessages({
+			consentStates: [ConsentState.Allowed],
+			onValue: undefined,
+			onError: undefined,
 			onFail,
-		);
+		});
 
 		console.log("Waiting for messages...");
 
@@ -311,6 +307,12 @@ const handleStream = async () => {
 
 				// skip if message content is not valid
 				const messageContent = extractMessageContent(message);
+				console.log("Extracted message content:", {
+					contentType: message.contentType?.typeId,
+					content: messageContent,
+					hasContent: !!messageContent,
+					messageId: message.id,
+				});
 				if (!messageContent || messageContent === "") continue;
 
 				const isDm = conversation instanceof Dm;
@@ -324,10 +326,7 @@ const handleStream = async () => {
 					content: messageContent,
 				});
 
-				// skip extra events for now
-				if (message.contentType.sameAs(ContentTypeTransactionReference)) {
-					continue;
-				}
+				// Skip group update messages
 				if (message.contentType.sameAs(ContentTypeGroupUpdated)) {
 					continue;
 				}
@@ -343,6 +342,7 @@ const handleStream = async () => {
 					// Send welcome message if it's the agent's first interaction
 					if (!hasAgentReplied) {
 						await conversation.send(WELCOME_MESSAGE, ContentTypeText);
+						continue; // Skip AI response generation for welcome messages
 					}
 
 					// Helper functions for group chat filtering
@@ -376,14 +376,17 @@ const handleStream = async () => {
 						continue;
 					}
 
-					// Generate and send a reaction
-					const reaction = await generateReaction({
-						messageContent,
-						reference: message.id,
-						referenceInboxId: senderInboxId,
-					});
+					// if not a transaction reference message, generate a reaction
+					if (!message.contentType.sameAs(ContentTypeTransactionReference)) {
+						// Generate and send a reaction
+						const reaction = await generateReaction({
+							messageContent,
+							reference: message.id,
+							referenceInboxId: senderInboxId,
+						});
 
-					await conversation.send(reaction, ContentTypeReaction);
+						await conversation.send(reaction, ContentTypeReaction);
+					}
 
 					// Get sender's EVM address
 					const inboxState = await client.preferences.inboxStateFromInboxIds([
@@ -393,15 +396,16 @@ const handleStream = async () => {
 						inboxState?.[0]?.identifiers?.[0]?.identifier;
 
 					const chatId = `xmtp-${conversation.id}`;
-					console.log("CHAT ID", chatId);
 
 					// Get AI response
 					const completion: CompletionResponse = await sendToAgent({
 						chatId,
 						message: messageContent,
 						evmAddress: addressFromInboxId,
-						instructionsOverride: `This is Base Wallet ${isGroup ? "group" : "DM"} chat 
-using XMTP. Keep responses brief when possible. Use plain text, with occasional emojis. Here is your welcome message / persona that is sent to each new user: ${WELCOME_MESSAGE}.  The users EVM address is ${addressFromInboxId}.
+						instructionsOverride: `This is a ${isGroup ? "group" : "DM"} chat from The Base App (wallet) using XMTP. Keep responses brief when possible. Use plain text, with
+            occasional emojis. No links, no markdown, no html formatting. Here is your welcome message / persona that has already been sent to the user: ${WELCOME_MESSAGE}.  
+
+The user's EVM address is ${addressFromInboxId}.
 
 ** Important Rules **
 
@@ -421,14 +425,23 @@ TOOLS:
 Use as many tool calls as possible to fulfill the user's requests.  
 
 - Get portfolio information with "get-portfolio".
-- Fetch quotes and present order transactions with the "swap" tool on on CowSwap with "get-cowswap-orders".
-- Generate and present EVM transactions with "generate-evm-tx" for swaps, transfers, and basic transactions.`,
+- Fetch quotes and transaction payloads with "swap" tool, then use "generate-evm-tx" to process and show the transaction requests.
+- Use "generate-evm-tx" EVERYTIME AFTER performing swaps, transfers, and basic transactions.
+
+** CRITICAL FOR TOKEN TRANSFERS **
+When generating ERC20 token transfers:
+- The "to" field MUST be the TOKEN CONTRACT ADDRESS, not the recipient address
+- The recipient address goes in the transfer function data
+- For native ETH transfers, the "to" field is the recipient and value contains the amount
+- ALWAYS verify you have the correct token contract address before generating the transaction
+- If unsure about token contract address, fetch it from the user's portfolio first
+- Provide order URLs for cowswap orders (as plain text not markdown! i.e. "https://explorer.cow.fi/orders/{orderId}") and use 'generate-evm-tx' after all swap toolcalls.`,
 					});
 
-					console.log(
-						"BITTE COMPLETION",
-						JSON.stringify(completion.content, null, 2),
-					);
+					const completionContent = completion?.content;
+					if (completionContent) {
+						console.log("Bitte Completion Content", completionContent);
+					}
 
 					// Handle tool calls and transaction references
 					if (completion.toolCalls && completion.toolCalls.length > 0) {
@@ -436,37 +449,139 @@ Use as many tool calls as possible to fulfill the user's requests.
 							if ("result" in toolCall && toolCall.result?.data) {
 								const data = toolCall.result.data;
 
-								// Handle EVM sign requests
-								if ("evmSignRequest" in data && data.evmSignRequest) {
-									const signRequest = data.evmSignRequest;
-									const walletSendCalls: WalletSendCallsParams = {
-										version: "1.0",
-										from: addressFromInboxId as `0x${string}`,
-										chainId: `0x${signRequest.chainId.toString(16)}`,
-										calls: signRequest.params.map((param) => ({
-											to: param.to as `0x${string}`,
-											data: param.data as `0x${string}`,
-											value: param.value as `0x${string}`,
-										})),
-									};
+								// Only process if data is an object (not string, number, etc.)
+								if (typeof data === "object" && data !== null) {
+									// Handle EVM sign requests
+									if ("evmSignRequest" in data && data.evmSignRequest) {
+										const signRequest = data.evmSignRequest;
 
-									await conversation.send(
-										walletSendCalls,
-										ContentTypeWalletSendCalls,
-									);
-								}
+										console.log("Processing EVM sign request:", {
+											method: signRequest.method,
+											chainId: signRequest.chainId,
+											paramsLength: Array.isArray(signRequest.params)
+												? signRequest.params.length
+												: 0,
+										});
 
-								// Handle swap transactions
-								if ("swapArgs" in data && data.swapArgs) {
-									// Process swap transaction if needed
-									console.log("Swap args:", data.swapArgs);
+										// For eth_signTypedData_v4, params are [address, typedDataJson]
+										if (signRequest.method === "eth_signTypedData_v4") {
+											console.log(
+												"SIGN REQUEST",
+												JSON.stringify(signRequest, null, 2),
+											);
+
+											// Convert typed data signing to wallet send calls
+											if (
+												Array.isArray(signRequest.params) &&
+												signRequest.params.length >= 2
+											) {
+												try {
+													const typedDataJson = signRequest.params[1] as string;
+													const typedData = JSON.parse(typedDataJson);
+
+													// Extract verifying contract from domain as the target address
+													const verifyingContract =
+														typedData.domain?.verifyingContract;
+
+													if (verifyingContract) {
+														console.log("VERIFING CONTRACT", verifyingContract);
+														const walletSendCalls: WalletSendCallsParams = {
+															version: "1.0",
+															from: addressFromInboxId as `0x${string}`,
+															chainId: `0x${signRequest.chainId.toString(16)}`,
+															calls: [
+																{
+																	to: verifyingContract,
+																	data: "0x", // Typed data signing doesn't have transaction data
+																	value: "0x0", // No value for signature operations
+																},
+															],
+														};
+
+														console.log(
+															"Sending wallet send calls for eth_signTypedData_v4:",
+															walletSendCalls,
+														);
+														try {
+															await conversation.send(
+																walletSendCalls,
+																ContentTypeWalletSendCalls,
+															);
+															console.log(
+																"✅ Wallet send calls sent successfully for typed data",
+															);
+														} catch (error) {
+															console.error(
+																"❌ Failed to send wallet send calls for typed data:",
+																error,
+															);
+														}
+													} else {
+														console.log(
+															"No verifying contract found in typed data, skipping wallet send calls",
+														);
+													}
+												} catch (error) {
+													console.error(
+														"❌ Failed to parse typed data:",
+														error,
+													);
+												}
+											}
+											continue;
+										}
+
+										// For transaction methods like eth_sendTransaction
+										if (
+											Array.isArray(signRequest.params) &&
+											signRequest.params.length > 0 &&
+											typeof signRequest.params[0] === "object" &&
+											"to" in signRequest.params[0]
+										) {
+											const walletSendCalls: WalletSendCallsParams = {
+												version: "1.0",
+												from: addressFromInboxId as `0x${string}`,
+												chainId: `0x${signRequest.chainId.toString(16)}`,
+												calls: (
+													signRequest.params as EthTransactionParams[]
+												).map((param) => {
+													console.log("PARAM", param);
+													return {
+														to: param.to as `0x${string}`,
+														data: param.data || "0x",
+														value: param.value || "0x0",
+													};
+												}),
+											};
+
+											console.log(
+												"Sending wallet send calls:",
+												walletSendCalls,
+											);
+											try {
+												await conversation.send(
+													walletSendCalls,
+													ContentTypeWalletSendCalls,
+												);
+											} catch (error) {
+												console.error(
+													"❌ Failed to send wallet send calls:",
+													error,
+												);
+											}
+										}
+									}
 								}
+								// Silently ignore other data types (strings, numbers, etc.)
 							}
 						}
 					}
 
-					// Send AI response as a reply
-					if (completion.content) {
+					// Send AI response as a reply (ignore transaction references)
+					if (
+						completion.content &&
+						!message.contentType.sameAs(ContentTypeTransactionReference)
+					) {
 						const reply: Reply = {
 							reference: message.id,
 							contentType: ContentTypeText,
