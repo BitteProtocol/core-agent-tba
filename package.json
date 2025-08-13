@@ -31,6 +31,7 @@
 	},
 	"devDependencies": {
 		"@biomejs/biome": "2.1.1",
+		"@bitte-ai/types": "^0.8.0",
 		"@types/node": "^22.16.4",
 		"typescript": "^5.8.3"
 	},
