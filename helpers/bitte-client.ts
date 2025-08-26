@@ -1,5 +1,5 @@
 import { type ChatRequest, generateId, type ToolInvocation } from "ai";
-import { BITTE_API_KEY, CHAT_API_URL, DEFAULT_AGENT_ID } from "./config";
+import { BITTE_AGENT_ID, BITTE_API_KEY, CHAT_API_URL } from "./config";
 
 /** Template literal type for NEAR key pair strings */
 export type KeyPairString = `ed25519:${string}` | `secp256k1:${string}`;
@@ -24,14 +24,12 @@ export async function sendToAgent({
 	chatId,
 	message,
 	evmAddress,
-	agentId = DEFAULT_AGENT_ID,
 	contextMessage,
 	instructionsOverride,
 }: {
 	chatId: string;
 	message: string;
 	evmAddress: string;
-	agentId?: string;
 	contextMessage?: string;
 	instructionsOverride?: string;
 }) {
@@ -63,13 +61,19 @@ export async function sendToAgent({
 	const payload: ChatRequest & {
 		id: string;
 		evmAddress: string;
-		config: { agentId: string; instructionsOverride?: string };
+		config: {
+			agentId: string;
+			instructionsOverride?: string;
+			mastraAgentId: string;
+		};
 	} = {
 		id: chatId,
 		messages: messagesWithContext,
 		config: {
-			agentId,
+			// append bitte-xmtp- prefix required by Bitte API
+			agentId: `bitte-xmtp-${BITTE_AGENT_ID}`,
 			instructionsOverride,
+			mastraAgentId: "base-onchain-agent.vercel.app",
 		},
 		evmAddress,
 	};
@@ -101,7 +105,9 @@ export async function sendToAgent({
 				}
 
 				console.warn(
-					`⚠️  Attempt ${attempt}/${maxRetries} failed, retrying in ${getDelayMs(attempt)}ms...`,
+					`⚠️  Attempt ${attempt}/${maxRetries} failed, retrying in ${getDelayMs(
+						attempt,
+					)}ms...`,
 				);
 				await sleep(getDelayMs(attempt));
 				continue;
@@ -128,7 +134,9 @@ export async function sendToAgent({
 			}
 
 			console.warn(
-				`⚠️  Attempt ${attempt}/${maxRetries} failed: ${error}, retrying in ${getDelayMs(attempt)}ms...`,
+				`⚠️  Attempt ${attempt}/${maxRetries} failed: ${error}, retrying in ${getDelayMs(
+					attempt,
+				)}ms...`,
 			);
 			await sleep(getDelayMs(attempt));
 		}

@@ -30,9 +30,9 @@
 		"viem": "^2.31.7"
 	},
 	"devDependencies": {
-		"@biomejs/biome": "2.1.1",
+		"@biomejs/biome": "2.2.2",
 		"@bitte-ai/types": "^0.8.0",
-		"@types/node": "^22.16.4",
+		"@types/node": "^22.18.0",
 		"typescript": "^5.8.3"
 	},
 	"author": "Bitte",
