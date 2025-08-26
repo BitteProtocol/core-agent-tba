@@ -173,22 +173,6 @@ export const generateReaction = async ({
 	};
 };
 
-export const WELCOME_MESSAGE = `
-👋 Hey, I'm Bitte DeFi Agent!
-
-I help you:
-💰 Check balances across all your wallets
-📤 Transfer tokens to Basenames, ENS, ETH addresses
-🔄 Swap tokens with CowSwap (MEV protected)
-🔗 Multi-chain support - Base, Ethereum, Arbitrum & more
-
-Simply type:
-→ "What tokens do I have?"
-→ "Swap 10 USDC for ZORA on Base"
-→ "Send 0.0001 ETH to bitte.base.eth on Base"
-
-Powered by Bitte.ai`.trim();
-
 const CODECS = [
 	new ReactionCodec(),
 	new WalletSendCallsCodec(),
@@ -271,8 +255,6 @@ const handleStream = async () => {
 
 				// skip if the message is a reaction
 				if (message.contentType.sameAs(ContentTypeReaction)) continue;
-
-				console.log("Received message", message);
 
 				const conversation = await client.conversations.getConversationById(
 					message.conversationId,
@@ -382,26 +364,13 @@ const handleStream = async () => {
 						chatId,
 						message: messageContent,
 						evmAddress: addressFromInboxId,
-						contextMessage: `This is a ${isGroup ? "group" : "DM"} chat from The Base App (wallet) using XMTP. Keep responses brief when possible. Use plain text, with
-            occasional emojis. No links, no markdown, no html formatting. Here is your welcome message / persona that has already been sent to the user: ${WELCOME_MESSAGE}.  
+						contextMessage: `This is a ${
+							isGroup ? "group" : "DM"
+						} chat from within The Base App using XMTP. Keep responses brief when possible. Use plain text and emojis, do not include link, markdown, or html formatting. 
 
 The user's EVM address is ${addressFromInboxId}.
 
-** Important Rules **
-
-- ALWAYS fetch the user's portfolio for context & for up to date information.
-
-- Remember the active chain - default to BASE (chainId: 8453). Only change the active chain for the following reasons:
-  - User has no assets on the current chain
-  - User asked for a specific chain in their prompt
-  - A tool has failed due to the wrong chainId
-
-These are the only supported chains for CowSwap orders:
-Ethereum (chainId: 1), Gnosis (chainId: 100), Polygon (chainId: 137), Arbitrum (chainId: 42161), Base (chainId: 8453), Avalanche (chainId: 43114), and Sepolia (chainId: 11155111)
-
-- Your are an agent built by the Bitte Protocol Team (Bitte.ai). Do not mention OpenAI or any other LLMs.
-
-- After any transaciton, signature, or order tools use generate-evm-tx tool to generate and display the transaction details to the user.`,
+- Your are an agent built by the Bitte Protocol Team (Bitte.ai). Do not mention OpenAI or any other LLMs.`,
 					});
 
 					const completionContent = completion?.content;
@@ -518,7 +487,14 @@ Ethereum (chainId: 1), Gnosis (chainId: 100), Polygon (chainId: 137), Arbitrum (
 						ContentTypeTransactionReference,
 					);
 
-					console.log("isTransactionReference", isTransactionReference);
+					// send tx reference to agent
+					if (isTransactionReference) {
+						await conversation.send(
+							`Transaction reference: ${message.content}`,
+							ContentTypeTransactionReference,
+						);
+					}
+
 					// Send AI response (ignore transaction references)
 					if (completion.content && !isTransactionReference) {
 						// handle group messages

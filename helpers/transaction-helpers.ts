@@ -1,24 +1,7 @@
 import type { SwapFTData, TransferFTData } from "@bitte-ai/types";
+import type { WalletSendCallsParams } from "@xmtp/content-type-wallet-send-calls";
 import type { SignRequestData } from "near-safe";
 import { toHex } from "viem";
-
-// Define the WalletSendCallsParams type
-type WalletSendCallsParams = {
-	version: string;
-	chainId: `0x${string}`;
-	from: `0x${string}`;
-	calls: {
-		to?: `0x${string}`;
-		data?: `0x${string}`;
-		value?: `0x${string}`;
-		gas?: `0x${string}`;
-		metadata?: {
-			description: string;
-			transactionType: string;
-		} & Record<string, string>;
-	}[];
-	capabilities?: Record<string, string>;
-};
 
 // Define the generate-evm-tx tool response type
 interface GenerateEvmTxResponse {
