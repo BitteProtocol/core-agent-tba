@@ -261,7 +261,7 @@ const handleStream = async () => {
 				);
 				// skip if the conversation is not found
 				if (!conversation) {
-					console.log(
+					console.error(
 						`Conversation with id ${message.conversationId} not found`,
 					);
 					continue;
@@ -269,12 +269,7 @@ const handleStream = async () => {
 
 				// skip if message content is not valid
 				const messageContent = extractMessageContent(message);
-				console.log("Extracted message content:", {
-					contentType: message.contentType?.typeId,
-					content: messageContent,
-					hasContent: !!messageContent,
-					messageId: message.id,
-				});
+
 				if (!messageContent || messageContent === "") continue;
 
 				const isDm = conversation instanceof Dm;
@@ -373,15 +368,6 @@ The user's EVM address is ${addressFromInboxId}.
 - Your are an agent built by the Bitte Protocol Team (Bitte.ai). Do not mention OpenAI or any other LLMs.`,
 					});
 
-					const completionContent = completion?.content;
-					if (completionContent) {
-						console.log("Bitte Completion Content", completionContent);
-					}
-					const completionToolCalls = completion?.toolCalls;
-					if (completionToolCalls) {
-						console.log("Bitte Completion Tool Calls", completionToolCalls);
-					}
-
 					// Handle tool calls using the transaction helpers
 					if (completion.toolCalls && completion.toolCalls.length > 0) {
 						for (const toolCall of completion.toolCalls) {
@@ -393,12 +379,6 @@ The user's EVM address is ${addressFromInboxId}.
 									// Handle EVM sign requests using the helper functions
 									if ("evmSignRequest" in data && data.evmSignRequest) {
 										try {
-											console.log("Processing EVM sign request with helpers");
-											console.log(
-												"Full data object:",
-												JSON.stringify(data, null, 2),
-											);
-
 											// Validate the response
 											const validatedResponse = validateEvmTxResponse({
 												evmSignRequest: data.evmSignRequest,
@@ -428,18 +408,11 @@ The user's EVM address is ${addressFromInboxId}.
 											);
 
 											if (result.success) {
-												console.log(
-													"Sending wallet send calls:",
-													JSON.stringify(result.data, null, 2),
-												);
-
 												// Send the wallet send calls
 												await conversation.send(
 													result.data,
 													ContentTypeWalletSendCalls,
 												);
-
-												console.log("✅ Wallet send calls sent successfully");
 											} else {
 												console.error(
 													"❌ Failed to convert EVM transaction:",
@@ -476,9 +449,9 @@ The user's EVM address is ${addressFromInboxId}.
 											);
 										}
 									}
-									// Handle other tool call types (swapArgs, etc.) here if needed
+									// Handle other tool call types here if needed
 								}
-								// Silently ignore other data types (strings, numbers, etc.)
+								// Silently ignore other data types
 							}
 						}
 					}

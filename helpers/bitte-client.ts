@@ -64,7 +64,6 @@ export async function sendToAgent({
 		config: {
 			agentId: string;
 			instructionsOverride?: string;
-			mastraAgentId: string;
 		};
 	} = {
 		id: chatId,
@@ -73,7 +72,6 @@ export async function sendToAgent({
 			// append bitte-xmtp- prefix required by Bitte API
 			agentId: `bitte-xmtp-${BITTE_AGENT_ID}`,
 			instructionsOverride,
-			mastraAgentId: "base-onchain-agent.vercel.app",
 		},
 		evmAddress,
 	};
@@ -238,8 +236,9 @@ function parseStreamingResponse(responseText: string) {
 					// Ignore invalid tool call data
 				}
 			}
-		} catch (_parseError) {
+		} catch (parseError) {
 			// Skip unparseable lines
+			console.error({ SKIPPING_UNPARSEABLE_LINE: line, parseError });
 		}
 	}
 
