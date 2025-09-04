@@ -1,29 +1,10 @@
-import type { SwapFTData, TransferFTData } from "@bitte-ai/types";
+import type { WalletSendCallsParams } from "@xmtp/content-type-wallet-send-calls";
 import type { SignRequestData } from "near-safe";
 import { toHex } from "viem";
-
-// Define the WalletSendCallsParams type
-type WalletSendCallsParams = {
-	version: string;
-	chainId: `0x${string}`;
-	from: `0x${string}`;
-	calls: {
-		to?: `0x${string}`;
-		data?: `0x${string}`;
-		value?: `0x${string}`;
-		gas?: `0x${string}`;
-		metadata?: {
-			description: string;
-			transactionType: string;
-		} & Record<string, string>;
-	}[];
-	capabilities?: Record<string, string>;
-};
 
 // Define the generate-evm-tx tool response type
 interface GenerateEvmTxResponse {
 	evmSignRequest: SignRequestData;
-	ui?: SwapFTData | TransferFTData | Record<string, unknown>;
 }
 
 // Helper function to convert chainId to hex
@@ -31,89 +12,14 @@ function chainIdToHex(chainId: number): `0x${string}` {
 	return toHex(chainId) as `0x${string}`;
 }
 
-// Helper function to generate metadata based on UI data
-function generateMetadata(
-	method: string,
-	ui?: SwapFTData | TransferFTData | Record<string, unknown>,
-): { description: string; transactionType: string } & Record<string, string> {
-	const baseMetadata = {
-		description: "",
-		transactionType: method,
-	};
-
-	if (!ui || typeof ui !== "object") {
-		return {
-			...baseMetadata,
-			description: `Execute ${method} transaction`,
-		};
-	}
-
-	// Type guard for checking if ui has a type property
-	if (!("type" in ui)) {
-		return {
-			...baseMetadata,
-			description: `Execute ${method} transaction`,
-		};
-	}
-
-	// Handle swap type
-	if (ui.type === "swap") {
-		const swapData = ui as Partial<SwapFTData>;
-		const tokenInAmount = swapData.tokenIn?.amount || "unknown amount";
-		const tokenOutAmount = swapData.tokenOut?.amount || "unknown amount";
-		const networkName = swapData.network?.name || "unknown network";
-
-		return {
-			...baseMetadata,
-			description: `Swap ${tokenInAmount} for ${tokenOutAmount}`,
-			transactionType: "swap",
-			network: networkName,
-			...(swapData.tokenIn?.contractAddress && {
-				tokenInAddress: swapData.tokenIn.contractAddress,
-			}),
-			...(swapData.tokenOut?.contractAddress && {
-				tokenOutAddress: swapData.tokenOut.contractAddress,
-			}),
-			...(swapData.tokenIn?.amount && {
-				tokenInAmount: swapData.tokenIn.amount,
-			}),
-			...(swapData.tokenOut?.amount && {
-				tokenOutAmount: swapData.tokenOut.amount,
-			}),
-		};
-	}
-
-	// Handle transfer type
-	if (ui.type === "transfer-ft") {
-		const transferData = ui as Partial<TransferFTData>;
-		const tokenAmount = transferData.token?.amount || "unknown amount";
-		const tokenSymbol = transferData.token?.symbol || "";
-		const receiver = transferData.receiver || "unknown";
-		const networkName = transferData.network?.name || "unknown network";
-
-		return {
-			...baseMetadata,
-			description: `Transfer ${tokenAmount} ${tokenSymbol} to ${receiver}`,
-			transactionType: "transfer",
-			network: networkName,
-			...(transferData.token?.contractAddress && {
-				tokenAddress: transferData.token.contractAddress,
-			}),
-			...(transferData.token?.amount && {
-				tokenAmount: transferData.token.amount,
-			}),
-			...(transferData.token?.symbol && {
-				tokenSymbol: transferData.token.symbol,
-			}),
-			...(transferData.sender && { sender: transferData.sender }),
-			...(transferData.receiver && { receiver: transferData.receiver }),
-		};
-	}
-
-	// Fallback for unknown UI types
+// Helper function to generate metadata without UI context
+function generateMetadata(method: string): {
+	description: string;
+	transactionType: string;
+} {
 	return {
-		...baseMetadata,
 		description: `Execute ${method} transaction`,
+		transactionType: method,
 	};
 }
 
@@ -122,15 +28,8 @@ export async function convertEvmTxToWalletSendCalls(
 	response: GenerateEvmTxResponse,
 	userAddress: `0x${string}`,
 ): Promise<WalletSendCallsParams> {
-	const { evmSignRequest, ui } = response;
+	const { evmSignRequest } = response;
 	const { method, chainId, params } = evmSignRequest;
-
-	// Cast ui to a more flexible type for metadata generation
-	const uiForMetadata = ui as
-		| SwapFTData
-		| TransferFTData
-		| Record<string, unknown>
-		| undefined;
 
 	switch (method) {
 		case "eth_sendTransaction": {
@@ -151,7 +50,7 @@ export async function convertEvmTxToWalletSendCalls(
 					data: tx.data,
 					value: tx.value,
 					metadata: {
-						...generateMetadata(method, uiForMetadata),
+						...generateMetadata(method),
 						callIndex: String(index),
 					},
 				})),
@@ -215,7 +114,9 @@ export async function convertEvmTxToWalletSendCalls(
 				typedData = JSON.parse(typedDataJSON);
 			} catch (error) {
 				throw new Error(
-					`Failed to parse typed data: ${error instanceof Error ? error.message : "Unknown error"}`,
+					`Failed to parse typed data: ${
+						error instanceof Error ? error.message : "Unknown error"
+					}`,
 				);
 			}
 
@@ -232,7 +133,9 @@ export async function convertEvmTxToWalletSendCalls(
 					{
 						data: encodedData,
 						metadata: {
-							description: `Sign typed data (${method === "eth_signTypedData_v4" ? "v4" : "v1"})`,
+							description: `Sign typed data (${
+								method === "eth_signTypedData_v4" ? "v4" : "v1"
+							})`,
 							transactionType: method,
 							signer: signerAddress,
 							typedDataHash: encodedData,
@@ -320,14 +223,9 @@ export function validateEvmTxResponse(
 		throw new Error("Invalid response: missing params");
 	}
 
-	// Return the response as is, ui field is completely optional
+	// Return the validated response
 	return {
 		evmSignRequest: evmSignRequest as SignRequestData,
-		ui: responseObj.ui as
-			| SwapFTData
-			| TransferFTData
-			| Record<string, unknown>
-			| undefined,
 	};
 }
 
