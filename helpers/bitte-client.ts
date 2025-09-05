@@ -1,25 +1,6 @@
 import { type ChatRequest, generateId, type ToolInvocation } from "ai";
 import { BITTE_AGENT_ID, BITTE_API_KEY, CHAT_API_URL } from "./config";
 
-/** Template literal type for NEAR key pair strings */
-export type KeyPairString = `ed25519:${string}` | `secp256k1:${string}`;
-/**
- * Configuration for setting up the adapter
- */
-export interface SetupConfig {
-	/** The NEAR account ID */
-	accountId: string;
-	/** The MPC contract ID */
-	mpcContractId: string;
-	/** The NEAR network configuration */
-	/** The private key for the account */
-	privateKey?: string;
-	/** The derivation path for the Ethereum account. Defaults to "ethereum,1" */
-	derivationPath?: string;
-	/** The root public key for the account. If not available it will be fetched from the MPC contract */
-	rootPublicKey?: string;
-}
-
 export async function sendToAgent({
 	chatId,
 	message,

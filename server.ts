@@ -102,14 +102,6 @@ export type SignRequestData = {
 	chainId: number;
 	params: SessionRequestParams;
 };
-export type KeyPairString = `ed25519:${string}` | `secp256k1:${string}`;
-export interface SetupConfig {
-	accountId: string;
-	mpcContractId: string;
-	privateKey?: string;
-	derivationPath?: string;
-	rootPublicKey?: string;
-}
 
 // Type definitions for tool calls
 interface ToolCallWithArgs {
@@ -121,9 +113,7 @@ interface ToolCallWithArgs {
 interface ToolCallWithResult {
 	toolCallId: string;
 	result: {
-		data?:
-			| ({ evmSignRequest: SignRequestData } & { ui?: Record<string, unknown> })
-			| ({ swapArgs: SwapArgs } & { ui?: Record<string, unknown> });
+		data?: { evmSignRequest: SignRequestData } | { swapArgs: SwapArgs };
 		error?: string;
 	};
 	ui?: Record<string, unknown>;
@@ -354,6 +344,8 @@ const handleStream = async () => {
 
 					const chatId = `xmtp-${conversation.id}`;
 
+					console.log("Message Content", messageContent);
+
 					// Get AI response
 					const completion: CompletionResponse = await sendToAgent({
 						chatId,
@@ -367,6 +359,8 @@ The user's EVM address is ${addressFromInboxId}.
 
 - Your are an agent built by the Bitte Protocol Team (Bitte.ai). Do not mention OpenAI or any other LLMs.`,
 					});
+
+					console.log("Completion", JSON.stringify(completion, null, 2));
 
 					// Handle tool calls using the transaction helpers
 					if (completion.toolCalls && completion.toolCalls.length > 0) {
@@ -382,7 +376,6 @@ The user's EVM address is ${addressFromInboxId}.
 											// Validate the response
 											const validatedResponse = validateEvmTxResponse({
 												evmSignRequest: data.evmSignRequest,
-												ui: data.ui,
 											});
 
 											// Extract signer address from the request (optional - for verification)

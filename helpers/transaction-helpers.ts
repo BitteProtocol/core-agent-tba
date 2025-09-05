@@ -12,7 +12,6 @@ function chainIdToHex(chainId: number): `0x${string}` {
 	return toHex(chainId) as `0x${string}`;
 }
 
-// Helper function to generate metadata without UI context
 function generateMetadata(method: string): {
 	description: string;
 	transactionType: string;
