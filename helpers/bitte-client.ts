@@ -41,20 +41,30 @@ export async function sendToAgent({
 
 	const payload: ChatRequest & {
 		id: string;
-		evmAddress: string;
-		config: {
-			agentId: string;
-			instructionsOverride?: string;
+		body: {
+			id: string;
+			evmAddress: string;
+			accountId: string;
+			mode: string;
+			config: {
+				agentId: string;
+				instructionsOverride?: string;
+			};
 		};
 	} = {
 		id: chatId,
 		messages: messagesWithContext,
-		config: {
-			// append bitte-xmtp- prefix required by Bitte API
-			agentId: `bitte-xmtp-${BITTE_AGENT_ID}`,
-			instructionsOverride,
+		body: {
+			id: chatId,
+			accountId: evmAddress,
+			mode: "xmtp",
+			config: {
+				// append bitte-xmtp- prefix required by Bitte API
+				agentId: `bitte-xmtp-${BITTE_AGENT_ID}`,
+				instructionsOverride,
+			},
+			evmAddress,
 		},
-		evmAddress,
 	};
 
 	const maxRetries = 3;
