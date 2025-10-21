@@ -31,19 +31,19 @@ a
    ```bash
    bun scripts/gen-keys.ts
    ```
-   This will create or append to a `.env` file in your project directory with generated `WALLET_KEY` and `ENCRYPTION_KEY`. You may need to manually add the other required variables (see below).
+   This will create or append to a `.env` file in your project directory with generated `XMTP_WALLET_KEY` and `XMTP_DB_ENCRYPTION_KEY`. You may need to manually add the other required variables (see below).
 
 3. **Configure Environment Variables**:
    Create a `.env` file in the project root with the following variables:
    ```env
-   WALLET_KEY=your_wallet_private_key
-   ENCRYPTION_KEY=your_encryption_key
+   XMTP_WALLET_KEY=your_wallet_private_key
+   XMTP_DB_ENCRYPTION_KEY=your_encryption_key
    BITTE_API_KEY=your_bitte_api_key
    BITTE_AGENT_ID=your_bitte_agent_id
    XMTP_ENV=dev # or 'production', 'staging', etc. (as required)
    ```
-   - `WALLET_KEY`: EVM private key (hex string, with or without 0x prefix)
-   - `ENCRYPTION_KEY`: 32-byte hex string for local DB encryption
+   - `XMTP_WALLET_KEY`: EVM private key (hex string, with or without 0x prefix)
+   - `XMTP_DB_ENCRYPTION_KEY`: 32-byte hex string for local DB encryption
    - `BITTE_API_KEY`: Your Bitte API key (get from Bitte platform)
    - `BITTE_AGENT_ID`: The agent ID to route messages to (e.g. `coingecko-ai.vercel.app`)
    - `XMTP_ENV`: XMTP environment (`dev`, `production`, etc.)

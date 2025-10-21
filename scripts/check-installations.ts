@@ -6,14 +6,18 @@
 
 import { Client } from "@xmtp/node-sdk";
 import { createSigner, getEncryptionKeyFromHex } from "@/helpers/client";
-import { ENCRYPTION_KEY, WALLET_KEY, XMTP_ENV } from "@/helpers/config";
+import {
+	XMTP_DB_ENCRYPTION_KEY,
+	XMTP_ENV,
+	XMTP_WALLET_KEY,
+} from "@/helpers/config";
 
 async function checkInstallations() {
 	try {
 		console.log("🔍 Checking XMTP installations...");
 
 		// Create signer
-		const signer = createSigner(WALLET_KEY);
+		const signer = createSigner(XMTP_WALLET_KEY);
 		const identifier = await signer.getIdentifier();
 		console.log(`📧 Wallet address: ${identifier.identifier}`);
 
@@ -23,7 +27,7 @@ async function checkInstallations() {
 		let inboxId: string;
 		try {
 			const tempClient = await Client.create(signer, {
-				dbEncryptionKey: getEncryptionKeyFromHex(ENCRYPTION_KEY),
+				dbEncryptionKey: getEncryptionKeyFromHex(XMTP_DB_ENCRYPTION_KEY),
 				env: XMTP_ENV,
 				dbPath: null,
 			});
@@ -59,7 +63,9 @@ async function checkInstallations() {
 			console.log(`\n📋 Installation details:`);
 			currentInstallations.forEach((installation, index) => {
 				console.log(
-					`  ${index + 1}. ${installation.id} (${installation.clientTimestampNs || "unknown ts"})`,
+					`  ${index + 1}. ${installation.id} (${
+						installation.clientTimestampNs || "unknown ts"
+					})`,
 				);
 			});
 		} else {
@@ -81,7 +87,7 @@ async function checkInstallations() {
 		);
 		console.error("\nTroubleshooting:");
 		console.error(
-			"1. Check your .env file has correct WALLET_KEY, ENCRYPTION_KEY, and XMTP_ENV",
+			"1. Check your .env file has correct XMTP_WALLET_KEY, XMTP_DB_ENCRYPTION_KEY, and XMTP_ENV",
 		);
 		console.error("2. Make sure you have network connectivity");
 		process.exit(1);

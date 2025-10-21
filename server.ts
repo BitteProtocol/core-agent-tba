@@ -1,5 +1,14 @@
 import { openai } from "@ai-sdk/openai";
 import {
+	Agent,
+	ConsentState,
+	ConversationType,
+	type DecodedMessage,
+	type ExtractCodecContentTypes,
+	LogLevel,
+} from "@xmtp/agent-sdk";
+import { getTestUrl } from "@xmtp/agent-sdk/debug";
+import {
 	ContentTypeGroupUpdated,
 	GroupUpdatedCodec,
 } from "@xmtp/content-type-group-updated";
@@ -22,20 +31,10 @@ import {
 	ContentTypeWalletSendCalls,
 	WalletSendCallsCodec,
 } from "@xmtp/content-type-wallet-send-calls";
-import {
-	Client,
-	ConsentState,
-	type DecodedMessage,
-	Dm,
-	type ExtractCodecContentTypes,
-	Group,
-	LogLevel,
-} from "@xmtp/node-sdk";
 import { generateText } from "ai";
 import type { Address, Hex, Signature, TypedDataDomain } from "viem";
 import { sendToAgent } from "@/helpers/bitte-client";
 import {
-	createSigner,
 	extractMessageContent,
 	getDbPath,
 	getEncryptionKeyFromHex,
@@ -43,8 +42,7 @@ import {
 } from "@/helpers/client";
 import {
 	AGENT_CHAT_ID,
-	ENCRYPTION_KEY,
-	WALLET_KEY,
+	XMTP_DB_ENCRYPTION_KEY,
 	XMTP_ENV,
 } from "@/helpers/config";
 
@@ -175,16 +173,36 @@ const CODECS = [
 export type ClientContentTypes = ExtractCodecContentTypes<typeof CODECS>;
 
 // Create the signer and client
-const signer = createSigner(WALLET_KEY);
-const dbEncryptionKey = getEncryptionKeyFromHex(ENCRYPTION_KEY);
+// const signer = createSigner(WALLET_KEY);
+const dbEncryptionKey = getEncryptionKeyFromHex(XMTP_DB_ENCRYPTION_KEY);
 
-const client = await Client.create(signer, {
+// const client = await Client.create(signer, {
+//   dbEncryptionKey,
+//   env: XMTP_ENV,
+//   dbPath: getDbPath(XMTP_ENV),
+//   codecs: CODECS,
+//   loggingLevel: LogLevel.error,
+// });
+
+// 2. Spin up the agent
+const agent = (await Agent.createFromEnv({
+	env: "dev", // or 'production'
 	dbEncryptionKey,
-	env: XMTP_ENV,
 	dbPath: getDbPath(XMTP_ENV),
 	codecs: CODECS,
 	loggingLevel: LogLevel.error,
+})) as Agent<ClientContentTypes>;
+
+// 4. Log when we're ready
+agent.on("start", () => {
+	console.log(`Waiting for messages...`);
+	console.log(`Address: ${agent.address}`);
+	console.log(`🔗 ${getTestUrl(agent.client)}`);
 });
+
+await agent.start();
+
+const client = agent.client;
 
 // Log agent details
 void logAgentDetails(client);
@@ -228,6 +246,7 @@ const handleStream = async () => {
 			onValue: undefined,
 			onError: undefined,
 			onFail,
+			conversationType: ConversationType.Dm,
 		});
 
 		console.log("Waiting for messages...");
@@ -262,8 +281,9 @@ const handleStream = async () => {
 
 				if (!messageContent || messageContent === "") continue;
 
-				const isDm = conversation instanceof Dm;
-				const isGroup = conversation instanceof Group;
+				// Hardcoded to DM only for now
+				const isDm = true;
+				const isGroup = false;
 				const isSync = !isDm && !isGroup;
 
 				console.log({
@@ -336,9 +356,10 @@ const handleStream = async () => {
 					}
 
 					// Get sender's EVM address
-					const inboxState = await client.preferences.inboxStateFromInboxIds([
-						senderInboxId,
-					]);
+					const inboxState =
+						await agent.client.preferences.inboxStateFromInboxIds([
+							senderInboxId,
+						]);
 					const addressFromInboxId =
 						inboxState?.[0]?.identifiers?.[0]?.identifier;
 
