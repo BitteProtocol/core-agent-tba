@@ -1,4 +1,4 @@
-import type { XmtpEnv } from "@xmtp/node-sdk";
+import type { XmtpEnv } from "@xmtp/agent-sdk";
 import { config } from "dotenv";
 import { privateKeyToAddress } from "viem/accounts";
 

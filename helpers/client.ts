@@ -1,7 +1,7 @@
 import { getRandomValues } from "node:crypto";
 import fs from "node:fs";
-import type { Client, DecodedMessage } from "@xmtp/agent-sdk";
-import { IdentifierKind, type Signer } from "@xmtp/node-sdk";
+import type { Client, DecodedMessage, Signer } from "@xmtp/agent-sdk";
+import { IdentifierKind } from "@xmtp/agent-sdk";
 import { fromString, toString as uint8arraysToString } from "uint8arrays";
 import { createWalletClient, http, toBytes } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
