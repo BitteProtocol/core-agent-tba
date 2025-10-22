@@ -1,6 +1,10 @@
-import { Client } from "@xmtp/node-sdk";
+import { Agent } from "@xmtp/agent-sdk";
 import { createSigner, getEncryptionKeyFromHex } from "@/helpers/client.ts";
-import { ENCRYPTION_KEY, WALLET_KEY, XMTP_ENV } from "@/helpers/config";
+import {
+	XMTP_DB_ENCRYPTION_KEY,
+	XMTP_ENV,
+	XMTP_WALLET_KEY,
+} from "@/helpers/config";
 
 /**
  * Standalone Installation Cleaner
@@ -16,7 +20,7 @@ async function cleanAllInstallations() {
 		);
 
 		// Create signer
-		const signer = createSigner(WALLET_KEY);
+		const signer = createSigner(XMTP_WALLET_KEY);
 		const identifier = await signer.getIdentifier();
 		console.log(`📧 Wallet address: ${identifier.identifier}`);
 
@@ -26,13 +30,13 @@ async function cleanAllInstallations() {
 		let inboxId: string;
 		try {
 			// Try to create client to get InboxID (this might fail due to installations)
-			const tempClient = await Client.create(signer, {
-				dbEncryptionKey: getEncryptionKeyFromHex(ENCRYPTION_KEY),
+			const tempAgent = await Agent.create(signer, {
+				dbEncryptionKey: getEncryptionKeyFromHex(XMTP_DB_ENCRYPTION_KEY),
 				env: XMTP_ENV,
 				dbPath: null,
 			});
 
-			inboxId = tempClient.inboxId;
+			inboxId = tempAgent.client.inboxId;
 			console.log(`📦 InboxID: ${inboxId}`);
 		} catch (error) {
 			// If client creation fails, extract InboxID from error message
@@ -53,75 +57,17 @@ async function cleanAllInstallations() {
 
 		// Get current installations using static method
 		console.log("📊 Getting current installations...");
-		const inboxState = await Client.inboxStateFromInboxIds([inboxId], XMTP_ENV);
-		const currentInstallations = inboxState[0].installations;
-
-		console.log(`✓ Current installations: ${currentInstallations.length}`);
-
-		// Check if cleanup is needed
-		if (currentInstallations.length === 0) {
-			console.log("✅ No installations found - already clean");
-			return;
-		}
-
-		console.log(
-			`⚠️  Will remove ALL ${currentInstallations.length} installations`,
-		);
-
-		// Get ALL installations to revoke
-		const installationsToRevoke = currentInstallations.map(
-			(installation) => installation.bytes,
-		);
-
-		const installationsToRevokeInfo = currentInstallations.map(
-			(installation, index) => ({
-				index: index + 1,
-				id: installation.id,
-				clientTimestampNs: installation.clientTimestampNs,
-			}),
-		);
-
-		console.log("📋 ALL installations to revoke:");
-		installationsToRevokeInfo.forEach((inst) => {
-			console.log(
-				`  ${inst.index}. ${inst.id} (${inst.clientTimestampNs || "unknown ts"})`,
-			);
+		const tempAgent = await Agent.create(signer, {
+			dbEncryptionKey: getEncryptionKeyFromHex(XMTP_DB_ENCRYPTION_KEY),
+			env: XMTP_ENV,
+			dbPath: null,
 		});
 
-		console.log(
-			`\n🔄 Revoking ALL ${currentInstallations.length} installations...`,
-		);
+		const tempClient = tempAgent.client;
 
-		// Revoke ALL installations
-		await Client.revokeInstallations(
-			signer,
-			inboxId,
-			installationsToRevoke,
-			XMTP_ENV,
-		);
+		await tempClient.revokeAllOtherInstallations();
 
-		console.log(
-			`✅ Successfully revoked ALL ${currentInstallations.length} installations`,
-		);
-
-		// Verify final state
-		const finalInboxState = await Client.inboxStateFromInboxIds(
-			[inboxId],
-			XMTP_ENV,
-		);
-		const finalInstallations = finalInboxState[0].installations;
-
-		console.log(`\n📊 Final state:`);
-		console.log(`  Installations: ${finalInstallations.length}`);
-		console.log(`  Status: ✅ Completely clean - ready for fresh start`);
-
-		console.log(
-			"\n🎉 Complete cleanup finished! You can now start the server:",
-		);
-		console.log("   yarn start");
-		console.log(
-			"\nNote: The server will create a new installation automatically when it starts.",
-		);
+		console.log(`\n✅ Successfully revoked ALL installations`);
 	} catch (error) {
 		console.error(
 			"❌ Cleanup failed:",
